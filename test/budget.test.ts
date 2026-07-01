@@ -1,6 +1,6 @@
 // Test della logica di calcolo contro i dati reali del DB Notion "Spese"
 // (snapshot letto il 2026-07-02). Esegui con: npm test
-import { computeBudget, SpesaRow } from "../src/lib/budget";
+import { computeBudget, defaultSettings, SpesaRow } from "../src/lib/budget";
 
 const ALE = "27253915e41880c89c84f4adfa38de8d";
 const CRIS = "27253915e41880d1b464d47b60f2ef99";
@@ -93,6 +93,28 @@ eq("Totale Cris = libero", b.cris.totale, b.cris.libero);
 console.log("\n=== COMUNE ===");
 eq("Spese casa totale", b.speseCasaTotale, 247);
 eq("Spese casa righe reali", b.speseCasaRigheReali, 207);
+
+// --- Test modalita' percentuale + tetto ---
+console.log("\n=== % + TETTO ===");
+const s1 = defaultSettings();
+// Ale viaggi: 10% del libero (1295.15 -> 129.515), tetto 200 -> resta 129.52
+s1.ale.viaggi = { mode: "pct", target: 10, cap: 200 };
+const p1 = computeBudget(rows, s1);
+eq("Viaggi Ale 10% (no cap)", p1.ale.categorie.viaggi, 129.51);
+eq("Perc Viaggi Ale ~10%", p1.ale.perc.viaggi, 10);
+
+const s2 = defaultSettings();
+// Ale viaggi: 20% del libero (259.03) ma tetto 150 -> limitato a 150
+s2.ale.viaggi = { mode: "pct", target: 20, cap: 150 };
+const p2 = computeBudget(rows, s2);
+eq("Viaggi Ale 20% con tetto 150", p2.ale.categorie.viaggi, 150);
+
+const s3 = defaultSettings();
+// Extra casa portato a 100 -> casa totale 207+100=307 -> quota 153.5
+s3.casaExtraTotale = 100;
+const p3 = computeBudget(rows, s3);
+eq("Casa quota con extra 100", p3.ale.categorie.speseCasa, 153.5);
+eq("Totale Ale = libero (extra casa)", p3.ale.totale, p3.ale.libero);
 
 console.log(`\n${failures === 0 ? "TUTTI I TEST PASSATI ✅" : `${failures} TEST FALLITI ❌`}`);
 process.exit(failures === 0 ? 0 : 1);

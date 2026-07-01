@@ -38,13 +38,13 @@ npm test
 
 ## 2. Variabili d'ambiente
 
-| Nome           | Obbligatoria | Descrizione                                              |
-| -------------- | ------------ | ------------------------------------------------------- |
-| `NOTION_TOKEN` | sì           | Token dell'integrazione Notion (rigenerato)             |
-| `APP_PASSWORD` | sì           | Password fissa per entrare nell'app                     |
-| `SESSION_SALT` | consigliata  | Stringa a caso per firmare il cookie di sessione        |
-| `SALARY_ALE`   | no           | Override stipendio Ale (default 2359)                   |
-| `SALARY_CRIS`  | no           | Override stipendio Cristina (default 1500)              |
+| Nome           | Obbligatoria | Descrizione                                      |
+| -------------- | ------------ | ------------------------------------------------ |
+| `NOTION_TOKEN` | sì           | Token dell'integrazione Notion (rigenerato)      |
+| `APP_PASSWORD` | sì           | Password fissa per entrare nell'app              |
+| `SESSION_SALT` | consigliata  | Stringa a caso per firmare il cookie di sessione |
+| `SALARY_ALE`   | no           | Override stipendio Ale (default 2359)            |
+| `SALARY_CRIS`  | no           | Override stipendio Cristina (default 1500)       |
 
 L'integrazione Notion deve avere accesso al database "Spese" (condividi la pagina/DB con
 l'integrazione dentro Notion, altrimenti la query torna vuota).
@@ -95,7 +95,7 @@ leggibili via integrazione, quindi si ricalcola da zero).
 - **Libero** = Stipendio − BCC persona
 - **Allocazione** (priorità: Cibo → Investimenti → Conto personale → Viaggi → Fondo comune → Spese casa):
   - Cibo: fisso (Ale 225 / Cris 125)
-  - Investimenti: tetto 100 a testa
+  - Investimenti: tetto Ale 100 / Cris 0
   - Viaggi: tetto Ale 150 / Cris 100
   - Fondo comune: tetto Ale 120 / Cris 70
   - Spese casa: righe reali (`spesa-casa` + `revolut` + `shared`, non `bcc`) + 40 extra totale, diviso 50/50
@@ -103,7 +103,11 @@ leggibili via integrazione, quindi si ricalcola da zero).
 - Se il libero non basta, si comprimono **solo** le voci discrezionali dal basso
   (Fondo comune → Viaggi → Investimenti); Cibo e Spese casa non si toccano.
 
-I parametri (stipendi, cibo, tetti, extra casa) sono in `src/lib/config.ts`.
+**Impostazioni dall'app**: stipendi, extra casa, e per ogni categoria discrezionale (Cibo,
+Investimenti, Viaggi, Fondo comune) un **target** in `%` del libero o in `€` fisso più un **tetto**
+massimo. L'effettivo è `min(target, tetto)`. Conto personale (residuo) e Spese casa (Notion + extra)
+si adeguano per tenere il totale al 100%. Le impostazioni si salvano nel browser (localStorage). I
+valori di partenza sono in `src/lib/config.ts`.
 
 > I numeri sono **live**: possono differire dallo snapshot nelle regole del progetto, che è una
 > foto a una certa data.
