@@ -25,8 +25,8 @@ export const CONFIG = {
   // Cibo: importo fisso mensile (non dal DB)
   cibo: { ale: 225, cris: 125 } as Record<Person, number>,
 
-  // Investimenti: tetto massimo mensile a testa
-  investimentiCap: { ale: 100, cris: 100 } as Record<Person, number>,
+  // Investimenti: tetto massimo mensile (Cristina 0, Ale 100)
+  investimentiCap: { ale: 100, cris: 0 } as Record<Person, number>,
 
   // Viaggi: tetto massimo mensile
   viaggiCap: { ale: 150, cris: 100 } as Record<Person, number>,

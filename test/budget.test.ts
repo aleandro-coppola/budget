@@ -85,8 +85,9 @@ console.log("\n=== CRISTINA ===");
 eq("BCC Cris", b.cris.bcc, 505.75);
 eq("Libero Cris", b.cris.libero, 994.25);
 eq("Conto base Cris", b.cris.contoBase, 0);
+eq("Investimenti Cris", b.cris.categorie.investimenti, 0);
 eq("Casa Cris", b.cris.categorie.speseCasa, 123.5);
-eq("Conto personale Cris", b.cris.categorie.contoPersonale, 475.75);
+eq("Conto personale Cris", b.cris.categorie.contoPersonale, 575.75);
 eq("Totale Cris = libero", b.cris.totale, b.cris.libero);
 
 console.log("\n=== COMUNE ===");
