@@ -161,9 +161,14 @@ function allocate(
   };
 }
 
-function buildPerson(rows: SpesaRow[], person: Person, accountId: string, casaQuota: number): PersonBudget {
+function buildPerson(
+  rows: SpesaRow[],
+  person: Person,
+  accountId: string,
+  casaQuota: number,
+  stipendio: number
+): PersonBudget {
   const bcc = computeBcc(rows, person, accountId);
-  const stipendio = CONFIG.stipendio[person];
   const libero = stipendio - bcc.bcc;
   const contoBase = computeContoBase(rows, accountId);
   const alloc = allocate(person, libero, contoBase, casaQuota);
@@ -201,7 +206,12 @@ function buildPerson(rows: SpesaRow[], person: Person, accountId: string, casaQu
   };
 }
 
-export function computeBudget(rows: SpesaRow[]): BudgetResult {
+export interface Salaries {
+  ale: number;
+  cris: number;
+}
+
+export function computeBudget(rows: SpesaRow[], salaries?: Partial<Salaries>): BudgetResult {
   const casa = computeCasa(rows);
 
   const accIds = {
@@ -209,8 +219,13 @@ export function computeBudget(rows: SpesaRow[]): BudgetResult {
     cris: "27253915-e418-80d1-b464-d47b60f2ef99",
   };
 
-  const ale = buildPerson(rows, "ale", accIds.ale, casa.quota);
-  const cris = buildPerson(rows, "cris", accIds.cris, casa.quota);
+  // Stipendi: usa i valori passati (input utente) se validi, altrimenti i default del config.
+  const valid = (n: unknown) => typeof n === "number" && isFinite(n) && n >= 0;
+  const stipAle = valid(salaries?.ale) ? (salaries!.ale as number) : CONFIG.stipendio.ale;
+  const stipCris = valid(salaries?.cris) ? (salaries!.cris as number) : CONFIG.stipendio.cris;
+
+  const ale = buildPerson(rows, "ale", accIds.ale, casa.quota, stipAle);
+  const cris = buildPerson(rows, "cris", accIds.cris, casa.quota, stipCris);
 
   // Differenza sui contributi al "comune": Viaggi + Fondo comune + Spese casa
   const comuneAle = ale.categorie.viaggi + ale.categorie.fondoComune + ale.categorie.speseCasa;

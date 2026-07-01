@@ -16,18 +16,36 @@ const CATS: { key: keyof PersonBudget["categorie"]; label: string }[] = [
   { key: "speseCasa", label: "Spese casa" },
 ];
 
+const DEFAULT_ALE = "2359";
+const DEFAULT_CRIS = "1500";
+
 export default function Dashboard() {
   const router = useRouter();
   const [data, setData] = useState<BudgetResult | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string>("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [aleSalary, setAleSalary] = useState(DEFAULT_ALE);
+  const [crisSalary, setCrisSalary] = useState(DEFAULT_CRIS);
 
-  async function load() {
+  async function load(override?: { ale: string; cris: string }) {
+    const a = (override?.ale ?? aleSalary).trim();
+    const c = (override?.cris ?? crisSalary).trim();
     setLoading(true);
     setError("");
+    // ricorda i valori nel browser
     try {
-      const res = await fetch("/api/budget", { cache: "no-store" });
+      localStorage.setItem("salary_ale", a);
+      localStorage.setItem("salary_cris", c);
+    } catch {
+      /* localStorage non disponibile: ignora */
+    }
+    const params = new URLSearchParams();
+    if (a !== "") params.set("ale", a);
+    if (c !== "") params.set("cris", c);
+    const url = "/api/budget" + (params.toString() ? `?${params}` : "");
+    try {
+      const res = await fetch(url, { cache: "no-store" });
       if (res.status === 401) {
         router.push("/login");
         return;
@@ -47,7 +65,17 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    load();
+    let a = DEFAULT_ALE;
+    let c = DEFAULT_CRIS;
+    try {
+      a = localStorage.getItem("salary_ale") ?? DEFAULT_ALE;
+      c = localStorage.getItem("salary_cris") ?? DEFAULT_CRIS;
+    } catch {
+      /* ignora */
+    }
+    setAleSalary(a);
+    setCrisSalary(c);
+    load({ ale: a, cris: c });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -68,21 +96,47 @@ export default function Dashboard() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={load}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-100"
-          >
-            Ricalcola
-          </button>
-          <button
-            onClick={logout}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
-          >
-            Esci
-          </button>
-        </div>
+        <button
+          onClick={logout}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+        >
+          Esci
+        </button>
       </header>
+
+      {/* Input stipendi */}
+      <section className="mt-6 flex flex-wrap items-end gap-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <SalaryInput
+          label="Stipendio Ale"
+          accent="ale"
+          value={aleSalary}
+          onChange={setAleSalary}
+          onEnter={() => load()}
+        />
+        <SalaryInput
+          label="Stipendio Cristina"
+          accent="cris"
+          value={crisSalary}
+          onChange={setCrisSalary}
+          onEnter={() => load()}
+        />
+        <button
+          onClick={() => load()}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+        >
+          Ricalcola
+        </button>
+        <button
+          onClick={() => {
+            setAleSalary(DEFAULT_ALE);
+            setCrisSalary(DEFAULT_CRIS);
+            load({ ale: DEFAULT_ALE, cris: DEFAULT_CRIS });
+          }}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100"
+        >
+          Reset
+        </button>
+      </section>
 
       {loading && <p className="mt-10 text-center text-slate-500">Caricamento…</p>}
 
@@ -190,6 +244,42 @@ export default function Dashboard() {
         </>
       )}
     </main>
+  );
+}
+
+function SalaryInput({
+  label,
+  accent,
+  value,
+  onChange,
+  onEnter,
+}: {
+  label: string;
+  accent: "ale" | "cris";
+  value: string;
+  onChange: (v: string) => void;
+  onEnter: () => void;
+}) {
+  const text = accent === "ale" ? "text-ale" : "text-cris";
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={`text-xs font-medium ${text}`}>{label}</span>
+      <div className="flex items-center rounded-lg border border-slate-300 px-2 focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-900/10">
+        <span className="text-sm text-slate-400">€</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step={1}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onEnter();
+          }}
+          className="w-28 bg-transparent px-2 py-2 text-sm outline-none tabular-nums"
+        />
+      </div>
+    </label>
   );
 }
 
