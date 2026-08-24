@@ -71,23 +71,25 @@ const b = computeBudget(rows);
 
 console.log("\n=== ALE ===");
 eq("BCC Ale", b.ale.bcc, 1063.85);
-eq("Libero Ale", b.ale.libero, 1295.15);
+eq("Libero Ale", b.ale.libero, 836.15);
 eq("Conto base Ale", b.ale.contoBase, 217.99);
-eq("Cibo Ale", b.ale.categorie.cibo, 225);
-eq("Investimenti Ale", b.ale.categorie.investimenti, 100);
-eq("Viaggi Ale", b.ale.categorie.viaggi, 150);
-eq("Fondo Ale", b.ale.categorie.fondoComune, 120);
+eq("Cibo Ale", b.ale.categorie.cibo, 220);
+eq("Investimenti Ale", b.ale.categorie.investimenti, 191.43);
+// Con stipendio 1900 e questo dataset, il floor (contoBase 217.99) comprime
+// Fondo (azzerato) e parte di Viaggi.
+eq("Viaggi Ale", b.ale.categorie.viaggi, 83.23);
+eq("Fondo Ale", b.ale.categorie.fondoComune, 0);
 eq("Casa Ale", b.ale.categorie.speseCasa, 123.5);
-eq("Conto personale Ale", b.ale.categorie.contoPersonale, 576.65);
+eq("Conto personale Ale", b.ale.categorie.contoPersonale, 217.99);
 eq("Totale Ale = libero", b.ale.totale, b.ale.libero);
 
 console.log("\n=== CRISTINA ===");
 eq("BCC Cris", b.cris.bcc, 505.75);
 eq("Libero Cris", b.cris.libero, 994.25);
 eq("Conto base Cris", b.cris.contoBase, 0);
-eq("Investimenti Cris", b.cris.categorie.investimenti, 0);
+eq("Investimenti Cris", b.cris.categorie.investimenti, 76.85);
 eq("Casa Cris", b.cris.categorie.speseCasa, 123.5);
-eq("Conto personale Cris", b.cris.categorie.contoPersonale, 575.75);
+eq("Conto personale Cris", b.cris.categorie.contoPersonale, 567.83);
 eq("Totale Cris = libero", b.cris.totale, b.cris.libero);
 
 console.log("\n=== COMUNE ===");
@@ -96,15 +98,21 @@ eq("Spese casa righe reali", b.speseCasaRigheReali, 207);
 
 // --- Test modalita' percentuale + tetto ---
 console.log("\n=== % + TETTO ===");
+// Investimenti e Fondo azzerati in questi due sotto-test per isolare il
+// comportamento di Viaggi (%/tetto) senza far scattare la compressione da floor.
 const s1 = defaultSettings();
-// Ale viaggi: 10% del libero (1295.15 -> 129.515), tetto 200 -> resta 129.52
+s1.ale.investimenti = { mode: "eur", target: 0, cap: 0 };
+s1.ale.fondoComune = { mode: "eur", target: 0, cap: 0 };
+// Ale viaggi: 10% del libero (836.15 -> 83.615), tetto 200 -> resta 83.62 (no cap)
 s1.ale.viaggi = { mode: "pct", target: 10, cap: 200 };
 const p1 = computeBudget(rows, s1);
-eq("Viaggi Ale 10% (no cap)", p1.ale.categorie.viaggi, 129.51);
+eq("Viaggi Ale 10% (no cap)", p1.ale.categorie.viaggi, 83.62);
 eq("Perc Viaggi Ale ~10%", p1.ale.perc.viaggi, 10);
 
 const s2 = defaultSettings();
-// Ale viaggi: 20% del libero (259.03) ma tetto 150 -> limitato a 150
+s2.ale.investimenti = { mode: "eur", target: 0, cap: 0 };
+s2.ale.fondoComune = { mode: "eur", target: 0, cap: 0 };
+// Ale viaggi: 20% del libero (167.23) ma tetto 150 -> limitato a 150
 s2.ale.viaggi = { mode: "pct", target: 20, cap: 150 };
 const p2 = computeBudget(rows, s2);
 eq("Viaggi Ale 20% con tetto 150", p2.ale.categorie.viaggi, 150);

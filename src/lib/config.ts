@@ -18,21 +18,21 @@ export const NOTION = {
 export const CONFIG = {
   // Stipendio lordo mensile (env override: SALARY_ALE / SALARY_CRIS)
   stipendio: {
-    ale: Number(process.env.SALARY_ALE ?? 2359),
+    ale: Number(process.env.SALARY_ALE ?? 1900),
     cris: Number(process.env.SALARY_CRIS ?? 1500),
   } as Record<Person, number>,
 
-  // Cibo: importo fisso mensile (non dal DB)
-  cibo: { ale: 225, cris: 125 } as Record<Person, number>,
+  // Cibo: importo fisso mensile (non dal DB, non scala col reddito)
+  cibo: { ale: 220, cris: 130 } as Record<Person, number>,
 
-  // Investimenti: tetto massimo mensile (Cristina 0, Ale 100)
-  investimentiCap: { ale: 100, cris: 0 } as Record<Person, number>,
+  // Investimenti: tetto massimo mensile (20% del residuo dopo cibo, sul libero attuale)
+  investimentiCap: { ale: 191.43, cris: 76.85 } as Record<Person, number>,
 
-  // Viaggi: tetto massimo mensile
-  viaggiCap: { ale: 150, cris: 100 } as Record<Person, number>,
+  // Viaggi: tetto massimo mensile (15% del residuo dopo cibo, sul libero attuale)
+  viaggiCap: { ale: 143.57, cris: 57.64 } as Record<Person, number>,
 
-  // Fondo comune: tetto massimo mensile
-  fondoCap: { ale: 120, cris: 70 } as Record<Person, number>,
+  // Fondo comune: tetto massimo mensile (10% del residuo dopo cibo, sul libero attuale)
+  fondoCap: { ale: 95.72, cris: 38.43 } as Record<Person, number>,
 
   // Spese casa: extra fisso TOTALE aggiunto alle righe reali (poi diviso 50/50)
   casaExtraTotale: 40,
