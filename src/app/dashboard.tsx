@@ -46,13 +46,13 @@ function defaultSettings(): Settings {
     cap: { ale: a, cris: cr },
   });
   return {
-    salaries: { ale: "2359", cris: "1500" },
+    salaries: { ale: "1900", cris: "1500" },
     casaExtra: "40",
     cats: {
-      cibo: c("225", "125"),
-      investimenti: c("100", "0"),
-      viaggi: c("150", "100"),
-      fondoComune: c("120", "70"),
+      cibo: c("220", "130"),
+      investimenti: c("191.43", "76.85"),
+      viaggi: c("143.57", "57.64"),
+      fondoComune: c("95.72", "38.43"),
     },
   };
 }
