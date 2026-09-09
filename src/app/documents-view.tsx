@@ -234,6 +234,66 @@ const CYCLE: CyclePhase[] = [
   },
 ];
 
+type Confidence = "certo" | "probabile" | "ipotesi";
+
+interface GoldDriver {
+  context: string;
+  why: string;
+  confidence: Confidence;
+  note?: string;
+  warn?: boolean;
+}
+const GOLD_DRIVERS: GoldDriver[] = [
+  {
+    context: "Recessione \"da domanda\" (tassi in calo)",
+    why: "Anticipa i tagli tassi e l'allentamento monetario — l'oro non paga interessi, tassi reali in calo lo favoriscono",
+    confidence: "certo",
+    note: "meccanismo consolidato",
+  },
+  {
+    context: "Stagflazione (anni '70 il caso di riferimento)",
+    why: "Azioni e obbligazioni soffrono insieme (utili in calo + tassi in salita) — l'oro resta l'unico a proteggere il potere d'acquisto",
+    confidence: "ipotesi",
+    note: "un solo vero periodo storico di stagflazione nei dati moderni — trarne certezze statistiche è rischioso",
+  },
+  {
+    context: "Crisi sistemiche acute (2008, 2020)",
+    why: "La correlazione con le azioni si inverte bruscamente, l'oro fa da scudo",
+    confidence: "certo",
+  },
+  {
+    context: "Periodi \"normali\" (oggi incluso)",
+    why: "Correlazione oro-azioni ultimi 20 anni leggermente positiva (+0,14), resta positiva su orizzonti di 36 mesi — nei periodi non di crisi si muovono insieme, spinti dalla liquidità globale",
+    confidence: "certo",
+    note: "dato Morningstar/UBS 2025",
+    warn: true,
+  },
+];
+
+interface BondCase {
+  type: string;
+  protects: boolean;
+  note: string;
+}
+const BOND_CASES: BondCase[] = [
+  { type: "Da domanda / deflazionistica (tassi scendono)", protects: true, note: "asset di riferimento in questo scenario" },
+  { type: "Stagflazionistica (tassi alti/in salita + inflazione alta)", protects: false, note: "soffrono come tutto il resto" },
+];
+
+interface RegimeRow {
+  ind: string;
+  val: string;
+  signal: string;
+  tone: "red" | "amber" | "warn";
+}
+const REGIME_NOW: RegimeRow[] = [
+  { ind: "Inflazione USA/Eurozona", val: "3,0–3,7%, sopra target", signal: "Verso stagflazione", tone: "red" },
+  { ind: "Crescita PIL eurozona", val: "Rivista a +0,8% 2026", signal: "Debole", tone: "red" },
+  { ind: "Fed", val: "Board diviso, bias hawkish", signal: "Restrittivo", tone: "amber" },
+  { ind: "BCE", val: "Rialzo atteso 10/9 (~95% probabilità)", signal: "Restrittivo", tone: "amber" },
+  { ind: "Valutazioni oro", val: "Storicamente elevate", signal: "Rischio ingresso caro", tone: "warn" },
+];
+
 interface Term {
   term: string;
   def: string;
@@ -496,7 +556,7 @@ export default function DocumentsView() {
               <p className="text-[11px] font-semibold leading-snug text-amber-800">
                 🪙 Oro — hedge strutturale
                 <br />
-                <span className="font-normal">bene in stagflazione E in recessione</span>
+                <span className="font-normal">bene in stagflazione E in recessione, vedi sotto ↓</span>
               </p>
             </div>
             <ArrowCell dir="down" />
@@ -509,6 +569,110 @@ export default function DocumentsView() {
             ⚠ Tendenze storiche generali (investment clock classico), non regole matematiche garantite — ogni ciclo ha
             le sue eccezioni e i cicli reali si sovrappongono.
           </p>
+        </Card>
+
+        {/* Oro — due motori distinti */}
+        <Card className="p-4 sm:p-6">
+          <h3 className="text-sm font-semibold text-slate-900">🪙 Oro — due motori distinti, non uno</h3>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            Non è un hedge automatico in ogni ribasso: lo è soprattutto nelle crisi acute o negli scenari
+            inflazionistici estremi. Nei cali &quot;normali&quot; di mercato può scendere insieme alle azioni.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {GOLD_DRIVERS.map((d) => (
+              <li
+                key={d.context}
+                className={`rounded-xl border p-3 ${d.warn ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-slate-800">
+                    {d.warn && "⚠️ "}
+                    {d.context}
+                  </p>
+                  <ConfidenceTag level={d.confidence} />
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">{d.why}</p>
+                {d.note && <p className="mt-1 text-[11px] italic text-slate-400">{d.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        {/* Obbligazioni — dipende dal tipo di recessione */}
+        <Card className="p-4 sm:p-6">
+          <h3 className="text-sm font-semibold text-slate-900">
+            📉 Obbligazioni governative — dipende dal TIPO di recessione
+          </h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {BOND_CASES.map((b) => (
+              <div
+                key={b.type}
+                className={`rounded-xl border p-3 ${b.protects ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}
+              >
+                <p className={`text-xs font-semibold ${b.protects ? "text-emerald-800" : "text-rose-800"}`}>
+                  {b.protects ? "✅ Proteggono — " : "❌ Non proteggono — "}
+                  {b.type}
+                </p>
+                <p className={`mt-1 text-xs leading-relaxed ${b.protects ? "text-emerald-700" : "text-rose-700"}`}>
+                  {b.note}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-800">⚠️ Le correlazioni possono rompersi — aprile 2025</p>
+            <p className="mt-1 text-xs leading-relaxed text-amber-900">
+              Sotto i dazi Trump, azioni e obbligazioni USA sono scese insieme — la correlazione negativa &quot;da
+              manuale&quot; si è rotta per perdita di fiducia nel dollaro come rifugio.
+            </p>
+            <p className="mt-2 text-[11px] font-medium leading-relaxed text-amber-800">
+              Lezione pratica: i modelli di correlazione sono statistiche storiche, non leggi fisiche — possono
+              smettere di funzionare quando cambia la fiducia strutturale in un sistema (es. status di valuta di
+              riserva).
+            </p>
+          </div>
+        </Card>
+
+        {/* Regime attuale */}
+        <Card className="p-4 sm:p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-900">🌡️ Il regime attuale</h3>
+            <span className="text-[11px] font-medium text-slate-400">Settembre 2026</span>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-slate-400">
+                  <th className="py-1.5 pr-3 font-medium">Indicatore</th>
+                  <th className="py-1.5 pr-3 font-medium">Dato</th>
+                  <th className="py-1.5 font-medium">Segnale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {REGIME_NOW.map((r) => (
+                  <tr key={r.ind} className="border-t border-slate-100">
+                    <td className="py-2 pr-3 font-semibold text-slate-700">{r.ind}</td>
+                    <td className="py-2 pr-3 text-slate-500">{r.val}</td>
+                    <td className="py-2">
+                      <SignalTag tone={r.tone} label={r.signal} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3">
+            <p className="text-xs leading-relaxed text-sky-900">
+              <span className="mr-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                Probabile
+              </span>
+              Il quadro attuale è più vicino a stagflazione/tardo ciclo che a una vera recessione — coerente con la
+              scelta di mantenere l&apos;oro nel Core come hedge strutturale, ma spiega anche perché non ha
+              &quot;esploso&quot; al rialzo: siamo in una fase di stagflazione moderata, non nello scenario acuto anni
+              &apos;70.
+            </p>
+          </div>
         </Card>
       </section>
 
@@ -572,5 +736,29 @@ function ArrowCell({
       <span className="sm:hidden">↓</span>
       <span className="hidden sm:inline">{glyph}</span>
     </div>
+  );
+}
+
+function ConfidenceTag({ level }: { level: Confidence }) {
+  const style = {
+    certo: "bg-emerald-100 text-emerald-800",
+    probabile: "bg-sky-100 text-sky-800",
+    ipotesi: "bg-amber-100 text-amber-800",
+  }[level];
+  const label = { certo: "Certo", probabile: "Probabile", ipotesi: "Ipotesi" }[level];
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${style}`}>{label}</span>;
+}
+
+function SignalTag({ tone, label }: { tone: "red" | "amber" | "warn"; label: string }) {
+  const style = {
+    red: "bg-rose-100 text-rose-800",
+    amber: "bg-amber-100 text-amber-800",
+    warn: "bg-slate-200 text-slate-700",
+  }[tone];
+  const dot = { red: "🔴", amber: "🟡", warn: "⚠️" }[tone];
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${style}`}>
+      {dot} {label}
+    </span>
   );
 }
