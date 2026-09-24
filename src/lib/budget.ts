@@ -11,7 +11,10 @@
 //   (non bcc)    -> spesa pagata da Revolut
 //   shared       -> condivisa, divisa /2
 //   spesa-casa   -> (con shared, non bcc) va nel pocket Spese Casa
-//   paga-ale/cris-> (con shared) chi anticipa: l'altro gli deve meta' -> conguaglio
+//   paga-ale/cris-> (con shared) chi la anticipa con la sua carta
+//
+// Spese condivise non-casa: ognuno versa la sua meta' nel conto cointestato; chi ha
+// anticipato ritira dal cointestato. Senza paga-* la spesa si paga dal cointestato.
 
 import { CONFIG, Person } from "./config";
 
@@ -86,6 +89,7 @@ export interface PersonBudget {
   bccSharedPaga: number;
   bccIndividuale: number;
   rimanente: number;
+  cointestatoTotale: number; // quota condivise + % cointestato: bonifico totale al cointestato
   categorie: Categorie;
   // % delle voci fisse sul libero, % di pocket e conto personale sul rimanente
   perc: Categorie;
@@ -96,14 +100,8 @@ export interface PersonBudget {
 
 export interface CondivisaRow extends SpesaRow {
   lato: "bcc" | "revolut";
-  pagante: Person | null;
-}
-
-export interface Conguaglio {
-  credito: Record<Person, number>; // quanto ognuno ha anticipato per l'altro
-  importo: number; // bonifico netto
-  da: Person | null;
-  a: Person | null;
+  pagante: Person | null; // null = pagata direttamente dal cointestato
+  ritiro: number; // quanto il pagante ritira dal cointestato
 }
 
 export interface BudgetResult {
@@ -114,8 +112,7 @@ export interface BudgetResult {
   casaExtraTotale: number;
   casaRows: SpesaRow[];
   condiviseRows: CondivisaRow[];
-  conguaglio: Conguaglio;
-  senzaPagante: SpesaRow[]; // shared Revolut senza paga-* ne' spesa-casa
+  ritiri: Record<Person, number>; // da ritirare dal cointestato per le spese anticipate
 }
 
 const has = (row: SpesaRow, tag: string) => row.tags.includes(tag);
@@ -176,7 +173,7 @@ function computeCasa(rows: SpesaRow[], casaExtraTotale: number) {
   return { casaRows, righeReali, totale, quota: totale / 2 };
 }
 
-// ---- Spese condivise non-casa: quota per persona + conguaglio paga-ale/paga-cris ----
+// ---- Spese condivise non-casa: quota da versare nel cointestato + ritiri di chi anticipa ----
 function payerOf(r: SpesaRow): Person | null {
   const a = has(r, "paga-ale");
   const c = has(r, "paga-cris");
@@ -186,12 +183,11 @@ function payerOf(r: SpesaRow): Person | null {
 
 function computeCondivise(rows: SpesaRow[]) {
   const quota: Record<Person, number> = { ale: 0, cris: 0 };
-  const credito: Record<Person, number> = { ale: 0, cris: 0 };
+  const ritiri: Record<Person, number> = { ale: 0, cris: 0 };
   const list: CondivisaRow[] = [];
-  const senzaPagante: SpesaRow[] = [];
 
   for (const r of rows) {
-    // Le righe casa (Revolut) sono pagate dal pocket Spese Casa: niente conguaglio.
+    // Le righe casa (Revolut) sono pagate dal pocket Spese Casa.
     if (!has(r, "shared") || isCasaPocket(r)) continue;
     const half = r.spesa / 2;
     const payer = payerOf(r);
@@ -200,29 +196,22 @@ function computeCondivise(rows: SpesaRow[]) {
     // BCC senza pagante unico: gia' divisa 50/50 nelle due BCC.
     if (bcc && !payer) continue;
 
-    if (payer) credito[payer] += half;
-
+    let ritiro = 0;
     if (bcc) {
-      // La BCC del pagante contiene gia' la sua meta'; l'altro la rimborsa dal Revolut.
+      // La BCC del pagante contiene gia' la sua meta': nel cointestato va solo quella dell'altro.
       quota[other(payer as Person)] += half;
+      ritiro = half;
     } else {
       quota.ale += half;
       quota.cris += half;
-      if (!payer && r.spesa > 0) senzaPagante.push(r);
+      if (payer) ritiro = r.spesa;
     }
+    if (payer) ritiri[payer] += ritiro;
 
-    if (r.spesa > 0) list.push({ ...r, lato: bcc ? "bcc" : "revolut", pagante: payer });
+    if (r.spesa > 0) list.push({ ...r, lato: bcc ? "bcc" : "revolut", pagante: payer, ritiro });
   }
 
-  const netto = credito.ale - credito.cris;
-  const conguaglio: Conguaglio = {
-    credito: { ale: round2(credito.ale), cris: round2(credito.cris) },
-    importo: round2(Math.abs(netto)),
-    da: netto > 0 ? "cris" : netto < 0 ? "ale" : null,
-    a: netto > 0 ? "ale" : netto < 0 ? "cris" : null,
-  };
-
-  return { quota, conguaglio, list, senzaPagante };
+  return { quota, ritiri: { ale: round2(ritiri.ale), cris: round2(ritiri.cris) }, list };
 }
 
 // Risolve un target (%/€) in € sulla base indicata e lo limita al tetto.
@@ -283,8 +272,12 @@ function buildPerson(
     viaggi: round2(a.pockets.viaggi),
     cointestato: round2(a.pockets.cointestato),
     imprevisti: round2(a.pockets.imprevisti),
-    contoPersonale: round2(a.conto),
+    contoPersonale: 0,
   };
+  // Il residuo assorbe gli arrotondamenti, cosi' il totale coincide al centesimo col libero.
+  categorie.contoPersonale = round2(
+    round2(libero) - Object.values(categorie).reduce((s, v) => s + v, 0)
+  );
 
   const onLibero = (v: number) => (libero > 0 ? round2((v / libero) * 100) : 0);
   const onRimanente = (v: number) => (a.rimanente > 0 ? round2((v / a.rimanente) * 100) : 0);
@@ -311,6 +304,7 @@ function buildPerson(
     bccSharedPaga: round2(bcc.bccSharedPaga),
     bccIndividuale: round2(bcc.bccIndividuale),
     rimanente: round2(a.rimanente),
+    cointestatoTotale: round2(categorie.quotaCondivise + categorie.cointestato),
     categorie,
     perc,
     totale,
@@ -344,7 +338,6 @@ export function computeBudget(rows: SpesaRow[], settings?: BudgetSettings): Budg
     casaExtraTotale: round2(s.casaExtraTotale),
     casaRows: casa.casaRows,
     condiviseRows: condivise.list,
-    conguaglio: condivise.conguaglio,
-    senzaPagante: condivise.senzaPagante,
+    ritiri: condivise.ritiri,
   };
 }

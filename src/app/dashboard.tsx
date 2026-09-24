@@ -29,7 +29,7 @@ const CATS: { key: EditableCat; label: string; base: string }[] = [
   { key: "cibo", label: "Cibo", base: "del libero" },
   { key: "investimenti", label: "Investimenti", base: "del rimanente" },
   { key: "viaggi", label: "Viaggi", base: "del rimanente" },
-  { key: "cointestato", label: "Conto cointestato", base: "del rimanente" },
+  { key: "cointestato", label: "Cointestato (divertimento)", base: "del rimanente" },
   { key: "imprevisti", label: "Imprevisti", base: "del rimanente" },
 ];
 
@@ -39,13 +39,13 @@ const RIGHE_FISSE: Riga[] = [
   { key: "cibo", label: "Cibo mensile" },
   { key: "speseCasa", label: "Spese casa", note: "da Notion + extra" },
   { key: "spesePersonali", label: "Spese Revolut personali", note: "da Notion" },
-  { key: "quotaCondivise", label: "Spese condivise (metà)", note: "da Notion, vedi conguaglio" },
+  { key: "quotaCondivise", label: "Cointestato · spese condivise (metà)", note: "da Notion, vedi sotto" },
 ];
 
 const RIGHE_POCKET: Riga[] = [
   { key: "investimenti", label: "Investimenti" },
   { key: "viaggi", label: "Viaggi", note: "viaggi e sfizi" },
-  { key: "cointestato", label: "Conto cointestato", note: "divertimento" },
+  { key: "cointestato", label: "Cointestato · divertimento" },
   { key: "imprevisti", label: "Imprevisti" },
   { key: "contoPersonale", label: "Conto personale", note: "residuo" },
 ];
@@ -290,13 +290,24 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
             <PersonCard p={data.cris} accent="cris" />
           </section>
 
-          {data.senzaPagante.length > 0 && (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-              <span className="font-semibold">Spese condivise senza paga-ale/paga-cris:</span>{" "}
-              {data.senzaPagante.map((r) => `${r.name} (${euro(r.spesa)})`).join(", ")}. Sono divise a metà ma
-              escluse dal conguaglio: aggiungi il tag su Notion.
-            </div>
-          )}
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p>
+              <span className="font-semibold">Conto cointestato:</span> Ale versa{" "}
+              <span className="font-semibold">{euro(data.ale.cointestatoTotale)}</span>, Cristina versa{" "}
+              <span className="font-semibold">{euro(data.cris.cointestatoTotale)}</span> (metà spese condivise +
+              divertimento).
+            </p>
+            <p className="mt-1">
+              <span className="font-semibold">Da ritirare</span> per le spese condivise anticipate:{" "}
+              {(["ale", "cris"] as Who[]).map((w, i) => (
+                <span key={w}>
+                  {i > 0 && " · "}
+                  {WHO_LABEL[w]} <span className="font-semibold">{euro(data.ritiri[w])}</span>
+                </span>
+              ))}
+              .
+            </p>
+          </div>
 
           {/* Tabella riepilogo */}
           <section className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
@@ -338,26 +349,30 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.cris.totale)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.totale + data.cris.totale)}</td>
                 </tr>
-                <ConguaglioRow data={data} />
+                <tr className="border-t border-slate-200 font-semibold text-slate-700">
+                  <td className="px-4 py-2">
+                    Totale da versare nel cointestato
+                    <span className="ml-1 text-xs font-normal text-slate-400">(già incluso sopra)</span>
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.cointestatoTotale)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{euro(data.cris.cointestatoTotale)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {euro(data.ale.cointestatoTotale + data.cris.cointestatoTotale)}
+                  </td>
+                </tr>
+                <RitiriRow ritiri={data.ritiri} />
               </tbody>
             </table>
           </section>
 
-          {/* Conguaglio */}
+          {/* Spese condivise */}
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-slate-700">Conguaglio spese condivise</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Spese shared con paga-ale/paga-cris: chi paga anticipa anche la metà dell&apos;altro. Metà delle
-              spese pagate da Ale {euro(data.conguaglio.credito.ale)} − metà di quelle pagate da Cristina{" "}
-              {euro(data.conguaglio.credito.cris)} ={" "}
-              {data.conguaglio.da && data.conguaglio.a ? (
-                <span className="font-semibold text-slate-700">
-                  {WHO_LABEL[data.conguaglio.da]} dà {euro(data.conguaglio.importo)} a {WHO_LABEL[data.conguaglio.a]}
-                </span>
-              ) : (
-                <span className="font-semibold text-slate-700">in pari</span>
-              )}
-              .
+            <h2 className="text-sm font-semibold text-slate-700">Spese condivise → conto cointestato</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              Ogni spesa condivisa (non casa) si divide a metà e ognuno versa la sua metà nel cointestato. Chi
+              l&apos;ha anticipata con la sua carta la ritira dal cointestato. Per le spese BCC ritira solo la metà
+              dell&apos;altro, perché la sua è già nella BCC. Senza paga-ale/paga-cris la spesa si paga
+              direttamente dal cointestato.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
@@ -365,9 +380,10 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                   <tr>
                     <th className="py-1 pr-3 font-medium">Spesa</th>
                     <th className="py-1 pr-3 font-medium">Conto</th>
-                    <th className="py-1 pr-3 font-medium">Paga</th>
+                    <th className="py-1 pr-3 font-medium">Pagata da</th>
                     <th className="py-1 pr-3 text-right font-medium">Totale</th>
-                    <th className="py-1 text-right font-medium">Metà</th>
+                    <th className="py-1 pr-3 text-right font-medium">Metà</th>
+                    <th className="py-1 text-right font-medium">Da ritirare</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -379,13 +395,29 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                         {r.pagante ? (
                           <span className={r.pagante === "ale" ? "text-ale" : "text-cris"}>{WHO_LABEL[r.pagante]}</span>
                         ) : (
-                          <span className="text-amber-600">—</span>
+                          <span className="text-slate-500">Cointestato</span>
                         )}
                       </td>
                       <td className="py-1 pr-3 text-right tabular-nums">{euro(r.spesa)}</td>
-                      <td className="py-1 text-right tabular-nums text-slate-500">{euro(r.spesa / 2)}</td>
+                      <td className="py-1 pr-3 text-right tabular-nums text-slate-500">{euro(r.spesa / 2)}</td>
+                      <td className="py-1 text-right tabular-nums">
+                        {r.pagante ? (
+                          <span className={r.pagante === "ale" ? "text-ale" : "text-cris"}>{euro(r.ritiro)}</span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-slate-200 text-xs font-semibold text-slate-600">
+                    <td className="py-1.5 pr-3" colSpan={4}>
+                      Versano nel cointestato: Ale {euro(data.ale.categorie.quotaCondivise)} · Cristina{" "}
+                      {euro(data.cris.categorie.quotaCondivise)}
+                    </td>
+                    <td className="py-1.5 text-right" colSpan={2}>
+                      Ritirano: Ale {euro(data.ritiri.ale)} · Cristina {euro(data.ritiri.cris)}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -433,23 +465,23 @@ function CatRow({ riga, ale, cris }: { riga: Riga; ale: PersonBudget; cris: Pers
   );
 }
 
-function ConguaglioRow({ data }: { data: BudgetResult }) {
-  const { importo, da, a } = data.conguaglio;
-  const cell = (who: Who) => {
-    if (!da || !a) return <span className="text-slate-400">in pari</span>;
-    if (who === a) return <span className="text-emerald-700">+{euro(importo)} da ricevere</span>;
-    return <span className="text-rose-700">−{euro(importo)} da dare</span>;
-  };
+function RitiriRow({ ritiri }: { ritiri: Record<Who, number> }) {
+  const cell = (who: Who) =>
+    ritiri[who] > 0 ? (
+      <span className="text-emerald-700">+{euro(ritiri[who])} da ritirare</span>
+    ) : (
+      <span className="text-slate-400">—</span>
+    );
   return (
     <tr className="border-t border-amber-200 bg-amber-50">
       <td className="px-4 py-2 font-medium text-amber-900">
-        Conguaglio condivise
-        <span className="ml-1 text-xs font-normal text-amber-700">(bonifico, fuori dal totale)</span>
+        Conguaglio: da ritirare dal cointestato
+        <span className="ml-1 text-xs font-normal text-amber-700">(spese anticipate)</span>
       </td>
       <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("ale")}</td>
       <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("cris")}</td>
-      <td className="px-4 py-2 text-right text-sm font-semibold text-amber-900">
-        {da && a ? `${WHO_LABEL[da]} → ${WHO_LABEL[a]}` : "—"}
+      <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-amber-900">
+        {euro(ritiri.ale + ritiri.cris)}
       </td>
     </tr>
   );

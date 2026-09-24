@@ -1,5 +1,5 @@
 // Test della logica di calcolo contro i dati reali del DB Notion "Spese"
-// (snapshot letto il 2026-09-24). Esegui con: npm test
+// (snapshot letto il 2026-09-25). Esegui con: npm test
 import { computeBudget, defaultSettings, SpesaRow } from "../src/lib/budget";
 
 const ALE = "27253915e41880c89c84f4adfa38de8d";
@@ -18,7 +18,7 @@ const rows: SpesaRow[] = [
   r("Moto - Revisione", 6.6, ["bcc", "sfizio"], [ALE]),
   r("Moto - Assicurazione", 45, ["bcc", "sfizio"], [ALE]),
   r("Moto - Bollo", 7.5, ["bcc", "sfizio"], [ALE]),
-  r("Telepass / Benzina", 150, ["bcc", "shared", "paga-ale", "dynamic"], [CRIS, ALE]),
+  r("Telepass / Benzina", 100, ["shared", "dynamic", "revolut"], [CRIS, ALE]),
   r("Casa - Vodafone", 38, ["bcc", "shared", "paga-ale", "spesa-casa"], [ALE, CRIS]),
   r("Casa - Caldaia", 3.5, ["bcc", "shared", "spesa-casa"], [CRIS, ALE]),
   r("Auto Cris - Revisione", 8, ["bcc"], [CRIS]),
@@ -49,7 +49,7 @@ const rows: SpesaRow[] = [
   r("iCloud", 0.99, ["revolut"], [ALE]),
   r("Ale - P.IVA: Fatture in cloud", 4, ["revolut"], [ALE]),
   r("Ale - Dominio", 1.7, ["revolut"], [ALE]),
-  r("Sanità", 40, ["shared", "dynamic", "revolut"], [CRIS, ALE]),
+  r("Sanità", 25, ["shared", "dynamic", "revolut", "paga-cris"], [CRIS, ALE]),
   r("Casa - Bollette", 100, ["shared", "dynamic", "spesa-casa", "revolut"], [CRIS, ALE]),
   r("Claude AI", 20, ["shared", "paga-ale", "sfizio"], [ALE, CRIS]),
   r("Amazon Prime", 4.2, ["shared", "revolut", "paga-ale"], []),
@@ -77,55 +77,55 @@ function is(label: string, actual: unknown, expected: unknown) {
 const b = computeBudget(rows);
 
 console.log("\n=== ALE ===");
-eq("BCC Ale", b.ale.bcc, 462.85);
-eq("Libero Ale", b.ale.libero, 1437.15);
+eq("BCC Ale", b.ale.bcc, 387.85);
+eq("Libero Ale", b.ale.libero, 1512.15);
 eq("Cibo Ale", b.ale.categorie.cibo, 220);
 eq("Casa Ale", b.ale.categorie.speseCasa, 136);
 eq("Revolut personali Ale", b.ale.categorie.spesePersonali, 74.69);
-// Spotify, Netflix, Sanità, Claude, Amazon, Nespresso /2
-eq("Quota condivise Ale", b.ale.categorie.quotaCondivise, 50.6);
-eq("Rimanente Ale", b.ale.rimanente, 955.86);
-eq("Investimenti Ale 10%", b.ale.categorie.investimenti, 95.59);
-eq("Viaggi Ale 15%", b.ale.categorie.viaggi, 143.38);
-eq("Cointestato Ale 30%", b.ale.categorie.cointestato, 286.76);
-eq("Imprevisti Ale 5%", b.ale.categorie.imprevisti, 47.79);
-eq("Conto personale Ale", b.ale.categorie.contoPersonale, 382.34);
+// metà di Telepass, Spotify, Netflix, Sanità, Claude, Amazon, Nespresso (Vodafone è già nella sua BCC)
+eq("Quota condivise Ale", b.ale.categorie.quotaCondivise, 93.1);
+eq("Rimanente Ale", b.ale.rimanente, 988.36);
+eq("Investimenti Ale 10%", b.ale.categorie.investimenti, 98.84);
+eq("Viaggi Ale 15%", b.ale.categorie.viaggi, 148.25);
+eq("Cointestato Ale 30%", b.ale.categorie.cointestato, 296.51);
+eq("Imprevisti Ale 5%", b.ale.categorie.imprevisti, 49.42);
+eq("Conto personale Ale", b.ale.categorie.contoPersonale, 395.34);
+eq("Cointestato totale Ale", b.ale.cointestatoTotale, 389.61);
 eq("Totale Ale = libero", b.ale.totale, b.ale.libero);
 
 console.log("\n=== CRISTINA ===");
 eq("BCC Cris", b.cris.bcc, 1005.75);
 eq("Libero Cris", b.cris.libero, 494.25);
 eq("Revolut personali Cris", b.cris.categorie.spesePersonali, 0);
-// 50.6 come Ale + metà di Telepass (75) e Vodafone (19) pagati dalla BCC di Ale
-eq("Quota condivise Cris", b.cris.categorie.quotaCondivise, 144.6);
-eq("Rimanente Cris", b.cris.rimanente, 83.65);
+// 93.1 come Ale + metà di Vodafone (19) pagato dalla BCC di Ale
+eq("Quota condivise Cris", b.cris.categorie.quotaCondivise, 112.1);
+eq("Rimanente Cris", b.cris.rimanente, 116.15);
 eq("Investimenti Cris 0%", b.cris.categorie.investimenti, 0);
-eq("Viaggi Cris 15%", b.cris.categorie.viaggi, 12.55);
-// 30% = 25.10, compresso di 8.18 per lasciare 50 € sul conto personale
-eq("Cointestato Cris (compresso)", b.cris.categorie.cointestato, 16.92);
-eq("Imprevisti Cris 5%", b.cris.categorie.imprevisti, 4.18);
-eq("Conto personale Cris = minimo", b.cris.categorie.contoPersonale, 50);
-is("Cris compresso", b.cris.compresso, true);
+eq("Viaggi Cris 15%", b.cris.categorie.viaggi, 17.42);
+eq("Cointestato Cris 30%", b.cris.categorie.cointestato, 34.85);
+eq("Imprevisti Cris 5%", b.cris.categorie.imprevisti, 5.81);
+eq("Conto personale Cris", b.cris.categorie.contoPersonale, 58.07);
+is("Cris compresso", b.cris.compresso, false);
 eq("Totale Cris = libero", b.cris.totale, b.cris.libero);
 
 console.log("\n=== COMUNE ===");
 eq("Spese casa righe reali", b.speseCasaRigheReali, 232);
 eq("Spese casa totale", b.speseCasaTotale, 272);
-eq("Credito Ale (metà spese pagate da Ale)", b.conguaglio.credito.ale, 124.6);
-eq("Conguaglio importo", b.conguaglio.importo, 124.6);
-is("Conguaglio da", b.conguaglio.da, "cris");
-is("Conguaglio a", b.conguaglio.a, "ale");
-is("Senza pagante", b.senzaPagante.map((x) => x.name).join(","), "Sanità");
+// Ale: Claude+Nespresso+Amazon+Spotify+Netflix per intero (61.2) + metà Vodafone BCC (19)
+eq("Ritiro Ale", b.ritiri.ale, 80.2);
+eq("Ritiro Cris (Sanità)", b.ritiri.cris, 25);
+is("Telepass pagata dal cointestato", b.condiviseRows.find((x) => x.name.startsWith("Telepass"))?.pagante, null);
 
-console.log("\n=== CONGUAGLIO: esempio 100 vs 90 ===");
+console.log("\n=== COINTESTATO: esempio 100 vs 90 ===");
 const ex = computeBudget([
   r("Pagata da Ale", 100, ["shared", "revolut", "paga-ale"], []),
   r("Pagata da Cris", 90, ["shared", "revolut", "paga-cris"], []),
 ]);
-eq("Importo", ex.conguaglio.importo, 5);
-is("Da", ex.conguaglio.da, "cris");
-is("A", ex.conguaglio.a, "ale");
-eq("Quota condivise Ale", ex.ale.categorie.quotaCondivise, 95);
+eq("Versano ognuno", ex.ale.categorie.quotaCondivise, 95);
+eq("Ale ritira", ex.ritiri.ale, 100);
+eq("Cris ritira", ex.ritiri.cris, 90);
+// saldo: Ale 95 - 100 = -5, Cris 95 - 90 = +5 -> come un conguaglio di 5 € da Cris ad Ale
+eq("Saldo Cris - Ale", (ex.cris.categorie.quotaCondivise - ex.ritiri.cris) - (ex.ale.categorie.quotaCondivise - ex.ritiri.ale), 10);
 
 console.log("\n=== % + TETTO ===");
 const s1 = defaultSettings();

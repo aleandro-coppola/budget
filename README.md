@@ -108,9 +108,9 @@ anticipa, l'altro gli deve metà.
   Conto personale = residuo.
 - Se il conto personale scende sotto 50 €, si comprimono i pocket
   (Cointestato → Viaggi → Investimenti → Imprevisti).
-- **Conguaglio** = metà delle spese shared pagate da Ale − metà di quelle pagate da Cris
-  (righe casa escluse): positivo = Cris dà ad Ale, negativo = Ale dà a Cris. È un bonifico,
-  fuori dal totale.
+- **Conto cointestato** = metà delle spese condivise (non casa) + % divertimento. Chi ha anticipato
+  una spesa condivisa (`paga-X`) la ritira dal cointestato: per intero se pagata da Revolut, solo la
+  metà dell'altro se pagata dalla BCC. Senza `paga-*` si paga direttamente dal cointestato.
 
 **Impostazioni dall'app**: stipendi, extra casa, e per Cibo e ogni pocket un **target** in `%` o
 in `€` fisso più un **tetto** massimo. L'effettivo è `min(target, tetto)`. Le impostazioni si salvano
