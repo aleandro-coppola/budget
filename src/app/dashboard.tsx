@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { BudgetResult, PersonBudget, CatMode } from "@/lib/budget";
+import type { BudgetResult, BudgetSettings, Categorie, CatMode, EditableCat, PersonBudget } from "@/lib/budget";
 
 const euro = (n: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
 const pct = (n: number) => `${n.toFixed(1).replace(".", ",")}%`;
 
-type EditableCat = "cibo" | "investimenti" | "viaggi" | "fondoComune";
 type Who = "ale" | "cris";
+const WHO_LABEL: Record<Who, string> = { ale: "Ale", cris: "Cristina" };
 
 interface CatSet {
   mode: CatMode;
@@ -22,52 +23,62 @@ interface Settings {
   cats: Record<EditableCat, CatSet>;
 }
 
-const CAT_LABEL: Record<EditableCat, string> = {
-  cibo: "Cibo",
-  investimenti: "Investimenti",
-  viaggi: "Viaggi",
-  fondoComune: "Fondo comune",
-};
+const STORAGE_KEY = "budget_settings_v2";
 
-// Ordine di visualizzazione completo (incluse le auto: conto e casa)
-const ALL_CATS: { key: keyof PersonBudget["categorie"]; label: string; auto?: string }[] = [
-  { key: "cibo", label: "Cibo" },
-  { key: "investimenti", label: "Investimenti" },
-  { key: "contoPersonale", label: "Conto personale", auto: "residuo" },
-  { key: "viaggi", label: "Viaggi" },
-  { key: "fondoComune", label: "Fondo comune" },
-  { key: "speseCasa", label: "Spese casa", auto: "da Notion + extra" },
+const CATS: { key: EditableCat; label: string; base: string }[] = [
+  { key: "cibo", label: "Cibo", base: "del libero" },
+  { key: "investimenti", label: "Investimenti", base: "del rimanente" },
+  { key: "viaggi", label: "Viaggi", base: "del rimanente" },
+  { key: "cointestato", label: "Conto cointestato", base: "del rimanente" },
+  { key: "imprevisti", label: "Imprevisti", base: "del rimanente" },
 ];
 
-function defaultSettings(): Settings {
-  const c = (a: string, cr: string): CatSet => ({
-    mode: "eur",
-    target: { ale: a, cris: cr },
-    cap: { ale: a, cris: cr },
-  });
+type Riga = { key: keyof Categorie; label: string; note?: string };
+
+const RIGHE_FISSE: Riga[] = [
+  { key: "cibo", label: "Cibo mensile" },
+  { key: "speseCasa", label: "Spese casa", note: "da Notion + extra" },
+  { key: "spesePersonali", label: "Spese Revolut personali", note: "da Notion" },
+  { key: "quotaCondivise", label: "Spese condivise (metà)", note: "da Notion, vedi conguaglio" },
+];
+
+const RIGHE_POCKET: Riga[] = [
+  { key: "investimenti", label: "Investimenti" },
+  { key: "viaggi", label: "Viaggi", note: "viaggi e sfizi" },
+  { key: "cointestato", label: "Conto cointestato", note: "divertimento" },
+  { key: "imprevisti", label: "Imprevisti" },
+  { key: "contoPersonale", label: "Conto personale", note: "residuo" },
+];
+
+function fromDefaults(d: BudgetSettings): Settings {
+  const cats = Object.fromEntries(
+    CATS.map(({ key }) => [
+      key,
+      {
+        mode: d.ale[key].mode,
+        target: { ale: String(d.ale[key].target), cris: String(d.cris[key].target) },
+        cap: { ale: String(d.ale[key].cap), cris: String(d.cris[key].cap) },
+      },
+    ])
+  ) as Record<EditableCat, CatSet>;
   return {
-    salaries: { ale: "1900", cris: "1500" },
-    casaExtra: "40",
-    cats: {
-      cibo: c("220", "130"),
-      investimenti: c("191.43", "76.85"),
-      viaggi: c("143.57", "57.64"),
-      fondoComune: c("95.72", "38.43"),
-    },
+    salaries: { ale: String(d.salaries.ale), cris: String(d.salaries.cris) },
+    casaExtra: String(d.casaExtraTotale),
+    cats,
   };
 }
 
-function loadSettings(): Settings {
+function loadSettings(defaults: Settings): Settings {
   try {
-    const raw = localStorage.getItem("budget_settings");
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw);
-      if (p?.cats?.cibo && p?.salaries) return p as Settings;
+      if (p?.salaries && CATS.every(({ key }) => p?.cats?.[key])) return p as Settings;
     }
   } catch {
     /* ignora */
   }
-  return defaultSettings();
+  return defaults;
 }
 
 function toPayload(s: Settings) {
@@ -75,13 +86,13 @@ function toPayload(s: Settings) {
     const x = Number(v);
     return isFinite(x) && x >= 0 ? x : 0;
   };
-  const cat = (c: CatSet, who: Who) => ({ mode: c.mode, target: n(c.target[who]), cap: n(c.cap[who]) });
-  const person = (who: Who) => ({
-    cibo: cat(s.cats.cibo, who),
-    investimenti: cat(s.cats.investimenti, who),
-    viaggi: cat(s.cats.viaggi, who),
-    fondoComune: cat(s.cats.fondoComune, who),
-  });
+  const person = (who: Who) =>
+    Object.fromEntries(
+      CATS.map(({ key }) => {
+        const c = s.cats[key];
+        return [key, { mode: c.mode, target: n(c.target[who]), cap: n(c.cap[who]) }];
+      })
+    );
   return {
     salaries: { ale: n(s.salaries.ale), cris: n(s.salaries.cris) },
     casaExtraTotale: n(s.casaExtra),
@@ -90,19 +101,19 @@ function toPayload(s: Settings) {
   };
 }
 
-export default function Dashboard() {
+export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
   const router = useRouter();
   const [data, setData] = useState<BudgetResult | null>(null);
   const [generatedAt, setGeneratedAt] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [settings, setSettings] = useState<Settings>(() => fromDefaults(defaults));
 
   async function load(s: Settings) {
     setLoading(true);
     setError("");
     try {
-      localStorage.setItem("budget_settings", JSON.stringify(s));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
     } catch {
       /* ignora */
     }
@@ -132,7 +143,7 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    const s = loadSettings();
+    const s = loadSettings(fromDefaults(defaults));
     setSettings(s);
     load(s);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,6 +180,9 @@ export default function Dashboard() {
     <main className="mx-auto max-w-5xl px-4 py-8">
       <header className="flex items-center justify-between">
         <div>
+          <Link href="/" className="text-xs font-medium text-slate-400 hover:text-slate-600">
+            ← Home
+          </Link>
           <h1 className="text-2xl font-semibold">Budget Ale &amp; Cris</h1>
           {generatedAt && (
             <p className="text-xs text-slate-500">
@@ -197,7 +211,7 @@ export default function Dashboard() {
         </button>
         <button
           onClick={() => {
-            const d = defaultSettings();
+            const d = fromDefaults(defaults);
             setSettings(d);
             load(d);
           }}
@@ -210,13 +224,13 @@ export default function Dashboard() {
       {/* Pannello impostazioni categorie */}
       <details className="mt-4 rounded-2xl border border-slate-200 bg-white p-4" open>
         <summary className="cursor-pointer select-none text-sm font-semibold text-slate-700">
-          Impostazioni categorie (target %/€ + tetto)
+          Impostazioni pocket (target %/€ + tetto)
         </summary>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-slate-500">
               <tr>
-                <th className="px-2 py-1 font-medium">Categoria</th>
+                <th className="px-2 py-1 font-medium">Pocket</th>
                 <th className="px-2 py-1 font-medium">Modo</th>
                 <th className="px-2 py-1 text-right font-medium text-ale">Ale target</th>
                 <th className="px-2 py-1 text-right font-medium text-ale">Ale tetto €</th>
@@ -225,18 +239,21 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {(Object.keys(CAT_LABEL) as EditableCat[]).map((cat) => {
-                const cs = settings.cats[cat];
+              {CATS.map(({ key, label, base }) => {
+                const cs = settings.cats[key];
                 const unit = cs.mode === "pct" ? "%" : "€";
                 return (
-                  <tr key={cat} className="border-t border-slate-100">
-                    <td className="px-2 py-1.5 font-medium text-slate-700">{CAT_LABEL[cat]}</td>
+                  <tr key={key} className="border-t border-slate-100">
+                    <td className="px-2 py-1.5">
+                      <span className="font-medium text-slate-700">{label}</span>
+                      {cs.mode === "pct" && <span className="ml-1 text-xs text-slate-400">% {base}</span>}
+                    </td>
                     <td className="px-2 py-1.5">
                       <div className="inline-flex overflow-hidden rounded-md border border-slate-300 text-xs">
                         {(["eur", "pct"] as CatMode[]).map((m) => (
                           <button
                             key={m}
-                            onClick={() => setMode(cat, m)}
+                            onClick={() => setMode(key, m)}
                             className={`px-2 py-1 ${cs.mode === m ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}
                           >
                             {m === "eur" ? "€" : "%"}
@@ -244,18 +261,19 @@ export default function Dashboard() {
                         ))}
                       </div>
                     </td>
-                    <MiniNum value={cs.target.ale} unit={unit} onChange={(v) => setField(cat, "target", "ale", v)} />
-                    <MiniNum value={cs.cap.ale} unit="€" onChange={(v) => setField(cat, "cap", "ale", v)} />
-                    <MiniNum value={cs.target.cris} unit={unit} onChange={(v) => setField(cat, "target", "cris", v)} />
-                    <MiniNum value={cs.cap.cris} unit="€" onChange={(v) => setField(cat, "cap", "cris", v)} />
+                    <MiniNum value={cs.target.ale} unit={unit} onChange={(v) => setField(key, "target", "ale", v)} />
+                    <MiniNum value={cs.cap.ale} unit="€" onChange={(v) => setField(key, "cap", "ale", v)} />
+                    <MiniNum value={cs.target.cris} unit={unit} onChange={(v) => setField(key, "target", "cris", v)} />
+                    <MiniNum value={cs.cap.cris} unit="€" onChange={(v) => setField(key, "cap", "cris", v)} />
                   </tr>
                 );
               })}
             </tbody>
           </table>
           <p className="mt-2 text-xs text-slate-400">
-            Effettivo = min(target, tetto). In &quot;%&quot; il target è calcolato sul libero. Conto personale
-            (residuo) e Spese casa (Notion + extra) si adeguano per tenere il totale al 100%.
+            Effettivo = min(target, tetto). Rimanente = libero − cibo − spese casa − spese Revolut personali − metà
+            spese condivise. Il conto personale prende il residuo (minimo 50 €: sotto, i pocket vengono compressi
+            partendo dal cointestato).
           </p>
         </div>
       </details>
@@ -272,62 +290,105 @@ export default function Dashboard() {
             <PersonCard p={data.cris} accent="cris" />
           </section>
 
-          {/* Tabella riepilogo con percentuali */}
-          <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {data.senzaPagante.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <span className="font-semibold">Spese condivise senza paga-ale/paga-cris:</span>{" "}
+              {data.senzaPagante.map((r) => `${r.name} (${euro(r.spesa)})`).join(", ")}. Sono divise a metà ma
+              escluse dal conguaglio: aggiungi il tag su Notion.
+            </div>
+          )}
+
+          {/* Tabella riepilogo */}
+          <section className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-slate-100 text-left text-slate-600">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Categoria</th>
+                  <th className="px-4 py-2 font-medium">Pocket</th>
                   <th className="px-4 py-2 text-right font-medium text-ale">Ale</th>
                   <th className="px-4 py-2 text-right font-medium text-cris">Cristina</th>
                   <th className="px-4 py-2 text-right font-medium">Totale</th>
                 </tr>
               </thead>
               <tbody>
-                {ALL_CATS.map((c) => {
-                  const a = data.ale.categorie[c.key];
-                  const cr = data.cris.categorie[c.key];
-                  const ap = data.ale.perc[c.key];
-                  const cp = data.cris.perc[c.key];
-                  return (
-                    <tr key={c.key} className="border-t border-slate-100">
-                      <td className="px-4 py-2">
-                        {c.label}
-                        {c.auto && <span className="ml-1 text-xs text-slate-400">({c.auto})</span>}
-                      </td>
-                      <Amount value={a} p={ap} />
-                      <Amount value={cr} p={cp} />
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500">{euro(a + cr)}</td>
-                    </tr>
-                  );
-                })}
+                <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <td className="px-4 pb-1 pt-2" colSpan={4}>
+                    Spese fisse · % sul libero
+                  </td>
+                </tr>
+                {RIGHE_FISSE.map((r) => (
+                  <CatRow key={r.key} riga={r} ale={data.ale} cris={data.cris} />
+                ))}
+                <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
+                  <td className="px-4 py-2">Rimanente</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.rimanente)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{euro(data.cris.rimanente)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.rimanente + data.cris.rimanente)}</td>
+                </tr>
+                <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <td className="px-4 pb-1 pt-2" colSpan={4}>
+                    Pocket · % sul rimanente
+                  </td>
+                </tr>
+                {RIGHE_POCKET.map((r) => (
+                  <CatRow key={r.key} riga={r} ale={data.ale} cris={data.cris} />
+                ))}
                 <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
                   <td className="px-4 py-2">Totale (= libero)</td>
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.totale)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.cris.totale)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.totale + data.cris.totale)}</td>
                 </tr>
+                <ConguaglioRow data={data} />
               </tbody>
             </table>
           </section>
 
-          {/* Differenza al comune */}
+          {/* Conguaglio */}
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-slate-700">
-              Differenza contributi al comune (Viaggi + Fondo + Casa)
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              {data.differenzaChi === null ? (
-                "Contributi pari."
+            <h2 className="text-sm font-semibold text-slate-700">Conguaglio spese condivise</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Spese shared con paga-ale/paga-cris: chi paga anticipa anche la metà dell&apos;altro. Metà delle
+              spese pagate da Ale {euro(data.conguaglio.credito.ale)} − metà di quelle pagate da Cristina{" "}
+              {euro(data.conguaglio.credito.cris)} ={" "}
+              {data.conguaglio.da && data.conguaglio.a ? (
+                <span className="font-semibold text-slate-700">
+                  {WHO_LABEL[data.conguaglio.da]} dà {euro(data.conguaglio.importo)} a {WHO_LABEL[data.conguaglio.a]}
+                </span>
               ) : (
-                <>
-                  <span className={data.differenzaChi === "ale" ? "font-semibold text-ale" : "font-semibold text-cris"}>
-                    {data.differenzaChi === "ale" ? "Ale" : "Cristina"}
-                  </span>{" "}
-                  versa {euro(Math.abs(data.differenzaComune))} in piu&#39; nel comune.
-                </>
+                <span className="font-semibold text-slate-700">in pari</span>
               )}
+              .
             </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs text-slate-400">
+                  <tr>
+                    <th className="py-1 pr-3 font-medium">Spesa</th>
+                    <th className="py-1 pr-3 font-medium">Conto</th>
+                    <th className="py-1 pr-3 font-medium">Paga</th>
+                    <th className="py-1 pr-3 text-right font-medium">Totale</th>
+                    <th className="py-1 text-right font-medium">Metà</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.condiviseRows.map((r, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="py-1 pr-3 text-slate-600">{r.name}</td>
+                      <td className="py-1 pr-3 text-xs uppercase text-slate-400">{r.lato}</td>
+                      <td className="py-1 pr-3 text-xs">
+                        {r.pagante ? (
+                          <span className={r.pagante === "ale" ? "text-ale" : "text-cris"}>{WHO_LABEL[r.pagante]}</span>
+                        ) : (
+                          <span className="text-amber-600">—</span>
+                        )}
+                      </td>
+                      <td className="py-1 pr-3 text-right tabular-nums">{euro(r.spesa)}</td>
+                      <td className="py-1 text-right tabular-nums text-slate-500">{euro(r.spesa / 2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Dettaglio spese casa */}
@@ -353,6 +414,44 @@ export default function Dashboard() {
         </>
       )}
     </main>
+  );
+}
+
+function CatRow({ riga, ale, cris }: { riga: Riga; ale: PersonBudget; cris: PersonBudget }) {
+  const a = ale.categorie[riga.key];
+  const c = cris.categorie[riga.key];
+  return (
+    <tr className="border-t border-slate-100">
+      <td className="px-4 py-2">
+        {riga.label}
+        {riga.note && <span className="ml-1 text-xs text-slate-400">({riga.note})</span>}
+      </td>
+      <Amount value={a} p={ale.perc[riga.key]} />
+      <Amount value={c} p={cris.perc[riga.key]} />
+      <td className="px-4 py-2 text-right tabular-nums text-slate-500">{euro(a + c)}</td>
+    </tr>
+  );
+}
+
+function ConguaglioRow({ data }: { data: BudgetResult }) {
+  const { importo, da, a } = data.conguaglio;
+  const cell = (who: Who) => {
+    if (!da || !a) return <span className="text-slate-400">in pari</span>;
+    if (who === a) return <span className="text-emerald-700">+{euro(importo)} da ricevere</span>;
+    return <span className="text-rose-700">−{euro(importo)} da dare</span>;
+  };
+  return (
+    <tr className="border-t border-amber-200 bg-amber-50">
+      <td className="px-4 py-2 font-medium text-amber-900">
+        Conguaglio condivise
+        <span className="ml-1 text-xs font-normal text-amber-700">(bonifico, fuori dal totale)</span>
+      </td>
+      <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("ale")}</td>
+      <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("cris")}</td>
+      <td className="px-4 py-2 text-right text-sm font-semibold text-amber-900">
+        {da && a ? `${WHO_LABEL[da]} → ${WHO_LABEL[a]}` : "—"}
+      </td>
+    </tr>
   );
 }
 
@@ -424,30 +523,35 @@ function MiniNum({
 function PersonCard({ p, accent }: { p: PersonBudget; accent: "ale" | "cris" }) {
   const ring = accent === "ale" ? "ring-ale/30" : "ring-cris/30";
   const text = accent === "ale" ? "text-ale" : "text-cris";
+  const fisse = p.categorie.cibo + p.categorie.speseCasa + p.categorie.spesePersonali + p.categorie.quotaCondivise;
   return (
     <div className={`rounded-2xl border border-slate-200 bg-white p-5 ring-1 ${ring}`}>
       <div className="flex items-baseline justify-between">
         <h2 className={`text-lg font-semibold ${text}`}>{p.person === "ale" ? "Ale" : "Cristina"}</h2>
-        <span className="text-sm text-slate-500">Libero {euro(p.libero)}</span>
+        <span className="text-sm text-slate-500">Rimanente {euro(p.rimanente)}</span>
       </div>
       <dl className="mt-3 space-y-1 text-sm text-slate-600">
         <Row label="Stipendio" value={euro(p.stipendio)} />
         <Row label="− Spese BCC" value={euro(p.bcc)} />
         <Row label="= Libero (Revolut)" value={euro(p.libero)} bold />
+        <Row label="− Spese fisse (cibo, casa, Revolut, condivise)" value={euro(fisse)} />
+        <Row label="= Rimanente per i pocket" value={euro(p.rimanente)} bold />
       </dl>
       {p.compresso && (
         <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
-          Libero insufficiente: voci discrezionali compresse.
-          {p.deficit > 0 && ` Deficit residuo ${euro(p.deficit)}.`}
+          Rimanente stretto: pocket compressi per lasciare il minimo sul conto personale.
+          {p.deficit > 0 && ` Mancano ${euro(p.deficit)}.`}
         </p>
       )}
+      {!p.compresso && p.deficit > 0 && (
+        <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">Mancano {euro(p.deficit)}.</p>
+      )}
       <details className="mt-3 text-xs text-slate-500">
-        <summary className="cursor-pointer select-none">Dettaglio BCC / conto base</summary>
+        <summary className="cursor-pointer select-none">Dettaglio BCC</summary>
         <div className="mt-1 space-y-0.5">
           <Row label="BCC shared (no paga) /2" value={euro(p.bccSharedNoPaga)} small />
           <Row label="BCC shared (paga) /2" value={euro(p.bccSharedPaga)} small />
           <Row label="BCC individuale" value={euro(p.bccIndividuale)} small />
-          <Row label="Conto personale base (reale)" value={euro(p.contoBase)} small />
         </div>
       </details>
     </div>
@@ -456,7 +560,7 @@ function PersonCard({ p, accent }: { p: PersonBudget; accent: "ale" | "cris" }) 
 
 function Row({ label, value, bold, small }: { label: string; value: string; bold?: boolean; small?: boolean }) {
   return (
-    <div className={`flex justify-between ${bold ? "font-semibold text-slate-900" : ""}`}>
+    <div className={`flex justify-between gap-3 ${bold ? "font-semibold text-slate-900" : ""}`}>
       <dt className={small ? "text-slate-400" : ""}>{label}</dt>
       <dd className="tabular-nums">{value}</dd>
     </div>

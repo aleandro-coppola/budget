@@ -1,66 +1,39 @@
 // Logica pura di calcolo del budget Ale & Cris.
 // Nessuna dipendenza da Notion o da React: input = righe grezze, output = ripartizione.
-// Segue le "Regole Budget Ale & Cris".
+//
+// Flusso per persona:
+//   Stipendio - BCC                                   = Libero (va su Revolut)
+//   Libero - Cibo - Casa - Revolut personali - Quota condivise = Rimanente
+//   Rimanente -> Investimenti / Viaggi / Cointestato / Imprevisti (in % o €) + Conto personale (residuo)
+//
+// Tag Notion:
+//   bcc          -> spesa pagata dalla BCC (resta sul conto BCC)
+//   (non bcc)    -> spesa pagata da Revolut
+//   shared       -> condivisa, divisa /2
+//   spesa-casa   -> (con shared, non bcc) va nel pocket Spese Casa
+//   paga-ale/cris-> (con shared) chi anticipa: l'altro gli deve meta' -> conguaglio
 
-import { CONFIG, Person, PEOPLE } from "./config";
+import { CONFIG, Person } from "./config";
 
 export interface SpesaRow {
   name: string;
   spesa: number; // gia' normalizzato a 0 se null
-  tags: string[]; // es. ["bcc", "shared", "paga-ale"]
-  accounts: string[]; // id pagina account (normalizzati senza trattini)
-}
-
-export interface PersonBudget {
-  person: Person;
-  stipendio: number;
-  bcc: number;
-  libero: number;
-  // dettaglio BCC (auditabile)
-  bccSharedNoPaga: number; // meta' delle righe shared+bcc senza paga
-  bccSharedPaga: number; // meta' delle righe shared+bcc+paga-{persona}
-  bccIndividuale: number; // righe non-shared+bcc del suo account
-  contoBase: number; // spese individuali reali (revolut, non shared)
-  categorie: {
-    cibo: number;
-    investimenti: number;
-    contoPersonale: number;
-    viaggi: number;
-    fondoComune: number;
-    speseCasa: number;
-  };
-  // percentuale di ogni categoria sul libero
-  perc: {
-    cibo: number;
-    investimenti: number;
-    contoPersonale: number;
-    viaggi: number;
-    fondoComune: number;
-    speseCasa: number;
-  };
-  totale: number;
-  compresso: boolean; // true se il libero non bastava e si e' compresso
-  deficit: number; // >0 se libero insufficiente anche dopo compressione
-}
-
-export interface BudgetResult {
-  ale: PersonBudget;
-  cris: PersonBudget;
-  speseCasaTotale: number; // righe reali + extra (prima del /2)
-  speseCasaRigheReali: number;
-  casaExtraTotale: number;
-  casaRows: SpesaRow[];
-  differenzaComune: number; // Ale - Cris sui contributi condivisi (viaggi+fondo+casa)
-  differenzaChi: Person | null;
+  tags: string[];
+  accounts: string[]; // id pagina account
 }
 
 // ---- Impostazioni configurabili dall'utente ----
 export type CatMode = "eur" | "pct";
-export type EditableCat = "cibo" | "investimenti" | "viaggi" | "fondoComune";
+export type PocketCat = "investimenti" | "viaggi" | "cointestato" | "imprevisti";
+export type EditableCat = "cibo" | PocketCat;
+
+export const POCKETS: PocketCat[] = ["investimenti", "viaggi", "cointestato", "imprevisti"];
+// Ordine di taglio quando il conto personale scende sotto il minimo.
+const COMPRESSION_ORDER: PocketCat[] = ["cointestato", "viaggi", "investimenti", "imprevisti"];
 
 export interface CategorySetting {
-  mode: CatMode; // "eur" = valore fisso in €, "pct" = percentuale del libero
-  target: number; // € se mode="eur", 0-100 se mode="pct"
+  mode: CatMode; // "eur" = valore fisso, "pct" = % (del libero per cibo, del rimanente per i pocket)
+  target: number;
   cap: number; // tetto massimo in €
 }
 
@@ -74,32 +47,88 @@ export interface BudgetSettings {
 }
 
 export function defaultSettings(): BudgetSettings {
-  const mk = (v: number): CategorySetting => ({ mode: "eur", target: v, cap: v });
+  const person = (p: Person): PersonSettings => {
+    const pockets = Object.fromEntries(
+      POCKETS.map((k) => {
+        const v = CONFIG.pockets[k][p];
+        return [k, { mode: "pct", target: v.pct, cap: v.cap }];
+      })
+    ) as Record<PocketCat, CategorySetting>;
+    return { cibo: { mode: "eur", target: CONFIG.cibo[p], cap: CONFIG.cibo[p] }, ...pockets };
+  };
   return {
     salaries: { ale: CONFIG.stipendio.ale, cris: CONFIG.stipendio.cris },
     casaExtraTotale: CONFIG.casaExtraTotale,
-    ale: {
-      cibo: mk(CONFIG.cibo.ale),
-      investimenti: mk(CONFIG.investimentiCap.ale),
-      viaggi: mk(CONFIG.viaggiCap.ale),
-      fondoComune: mk(CONFIG.fondoCap.ale),
-    },
-    cris: {
-      cibo: mk(CONFIG.cibo.cris),
-      investimenti: mk(CONFIG.investimentiCap.cris),
-      viaggi: mk(CONFIG.viaggiCap.cris),
-      fondoComune: mk(CONFIG.fondoCap.cris),
-    },
+    ale: person("ale"),
+    cris: person("cris"),
   };
 }
 
+// ---- Risultato ----
+export interface Categorie {
+  cibo: number;
+  speseCasa: number;
+  spesePersonali: number; // spese Revolut individuali (non shared, non bcc)
+  quotaCondivise: number; // meta' delle spese shared non-casa non gia' in BCC
+  investimenti: number;
+  viaggi: number;
+  cointestato: number;
+  imprevisti: number;
+  contoPersonale: number; // residuo
+}
+
+export interface PersonBudget {
+  person: Person;
+  stipendio: number;
+  bcc: number;
+  libero: number;
+  bccSharedNoPaga: number;
+  bccSharedPaga: number;
+  bccIndividuale: number;
+  rimanente: number;
+  categorie: Categorie;
+  // % delle voci fisse sul libero, % di pocket e conto personale sul rimanente
+  perc: Categorie;
+  totale: number;
+  compresso: boolean;
+  deficit: number;
+}
+
+export interface CondivisaRow extends SpesaRow {
+  lato: "bcc" | "revolut";
+  pagante: Person | null;
+}
+
+export interface Conguaglio {
+  credito: Record<Person, number>; // quanto ognuno ha anticipato per l'altro
+  importo: number; // bonifico netto
+  da: Person | null;
+  a: Person | null;
+}
+
+export interface BudgetResult {
+  ale: PersonBudget;
+  cris: PersonBudget;
+  speseCasaTotale: number;
+  speseCasaRigheReali: number;
+  casaExtraTotale: number;
+  casaRows: SpesaRow[];
+  condiviseRows: CondivisaRow[];
+  conguaglio: Conguaglio;
+  senzaPagante: SpesaRow[]; // shared Revolut senza paga-* ne' spesa-casa
+}
+
 const has = (row: SpesaRow, tag: string) => row.tags.includes(tag);
+export const norm = (id: string) => id.replace(/-/g, "").toLowerCase();
 const belongsTo = (row: SpesaRow, personId: string) =>
   row.accounts.some((a) => norm(a) === norm(personId));
+const other = (p: Person): Person => (p === "ale" ? "cris" : "ale");
 
-export const norm = (id: string) => id.replace(/-/g, "").toLowerCase();
+function round2(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
 
-// ---- BCC per persona (formula validata sulle regole) ----
+// ---- BCC per persona ----
 function computeBcc(rows: SpesaRow[], person: Person, accountId: string) {
   const pagaTag = person === "ale" ? "paga-ale" : "paga-cris";
 
@@ -113,9 +142,9 @@ function computeBcc(rows: SpesaRow[], person: Person, accountId: string) {
     if (has(r, "shared")) {
       const hasAnyPaga = has(r, "paga-ale") || has(r, "paga-cris");
       if (!hasAnyPaga) {
-        sharedNoPaga += r.spesa; // diviso 2 dopo
+        sharedNoPaga += r.spesa;
       } else if (has(r, pagaTag)) {
-        sharedPaga += r.spesa; // diviso 2 dopo
+        sharedPaga += r.spesa;
       }
     } else if (belongsTo(r, accountId)) {
       individuale += r.spesa;
@@ -130,90 +159,105 @@ function computeBcc(rows: SpesaRow[], person: Person, accountId: string) {
   };
 }
 
-// ---- Conto personale base: spese individuali reali (revolut, non shared) ----
-function computeContoBase(rows: SpesaRow[], accountId: string) {
-  let sum = 0;
-  for (const r of rows) {
-    if (has(r, "revolut") && !has(r, "shared") && belongsTo(r, accountId)) {
-      sum += r.spesa;
-    }
-  }
-  return sum;
+// ---- Spese Revolut personali: non bcc, non shared, del proprio account ----
+function computePersonali(rows: SpesaRow[], accountId: string) {
+  return rows
+    .filter((r) => !has(r, "bcc") && !has(r, "shared") && belongsTo(r, accountId))
+    .reduce((s, r) => s + r.spesa, 0);
 }
 
-// ---- Spese casa: righe spesa-casa + revolut + shared, NON bcc, + extra totale ----
+// ---- Spese casa: shared + spesa-casa, non bcc (+ extra totale), divise 50/50 ----
+const isCasaPocket = (r: SpesaRow) => has(r, "shared") && has(r, "spesa-casa") && !has(r, "bcc");
+
 function computeCasa(rows: SpesaRow[], casaExtraTotale: number) {
-  const casaRows = rows.filter(
-    (r) => has(r, "spesa-casa") && has(r, "revolut") && has(r, "shared") && !has(r, "bcc")
-  );
+  const casaRows = rows.filter(isCasaPocket);
   const righeReali = casaRows.reduce((s, r) => s + r.spesa, 0);
   const totale = righeReali + casaExtraTotale;
   return { casaRows, righeReali, totale, quota: totale / 2 };
 }
 
-function round2(n: number) {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+// ---- Spese condivise non-casa: quota per persona + conguaglio paga-ale/paga-cris ----
+function payerOf(r: SpesaRow): Person | null {
+  const a = has(r, "paga-ale");
+  const c = has(r, "paga-cris");
+  if (a === c) return null;
+  return a ? "ale" : "cris";
 }
 
-// Risolve un target (%/€) in € e lo limita al tetto.
-function resolveCat(c: CategorySetting, libero: number): number {
-  const raw = c.mode === "pct" ? (libero * c.target) / 100 : c.target;
+function computeCondivise(rows: SpesaRow[]) {
+  const quota: Record<Person, number> = { ale: 0, cris: 0 };
+  const credito: Record<Person, number> = { ale: 0, cris: 0 };
+  const list: CondivisaRow[] = [];
+  const senzaPagante: SpesaRow[] = [];
+
+  for (const r of rows) {
+    // Le righe casa (Revolut) sono pagate dal pocket Spese Casa: niente conguaglio.
+    if (!has(r, "shared") || isCasaPocket(r)) continue;
+    const half = r.spesa / 2;
+    const payer = payerOf(r);
+    const bcc = has(r, "bcc");
+
+    // BCC senza pagante unico: gia' divisa 50/50 nelle due BCC.
+    if (bcc && !payer) continue;
+
+    if (payer) credito[payer] += half;
+
+    if (bcc) {
+      // La BCC del pagante contiene gia' la sua meta'; l'altro la rimborsa dal Revolut.
+      quota[other(payer as Person)] += half;
+    } else {
+      quota.ale += half;
+      quota.cris += half;
+      if (!payer && r.spesa > 0) senzaPagante.push(r);
+    }
+
+    if (r.spesa > 0) list.push({ ...r, lato: bcc ? "bcc" : "revolut", pagante: payer });
+  }
+
+  const netto = credito.ale - credito.cris;
+  const conguaglio: Conguaglio = {
+    credito: { ale: round2(credito.ale), cris: round2(credito.cris) },
+    importo: round2(Math.abs(netto)),
+    da: netto > 0 ? "cris" : netto < 0 ? "ale" : null,
+    a: netto > 0 ? "ale" : netto < 0 ? "cris" : null,
+  };
+
+  return { quota, conguaglio, list, senzaPagante };
+}
+
+// Risolve un target (%/€) in € sulla base indicata e lo limita al tetto.
+function resolveCat(c: CategorySetting, base: number): number {
+  const raw = c.mode === "pct" ? (base * c.target) / 100 : c.target;
   return Math.max(0, Math.min(raw, c.cap));
 }
 
-// ---- Allocazione per persona ----
 function allocate(
   libero: number,
-  contoBase: number,
-  casaQuota: number,
+  fisse: { speseCasa: number; spesePersonali: number; quotaCondivise: number },
   ps: PersonSettings
-): PersonBudget["categorie"] & { compresso: boolean; deficit: number } {
+) {
   const cibo = resolveCat(ps.cibo, libero);
-  const casa = casaQuota; // non comprimibile (gia' sostenuta)
+  const rimanente = libero - cibo - fisse.speseCasa - fisse.spesePersonali - fisse.quotaCondivise;
+  const base = Math.max(0, rimanente);
 
-  // Voci discrezionali: target (%/€) limitato al tetto
-  let investimenti = resolveCat(ps.investimenti, libero);
-  let viaggi = resolveCat(ps.viaggi, libero);
-  let fondo = resolveCat(ps.fondoComune, libero);
-
-  // Il conto personale assorbe il residuo
-  let conto = libero - cibo - investimenti - viaggi - fondo - casa;
-
-  // Floor del conto personale: almeno le spese individuali gia' sostenute,
-  // e almeno il floor discrezionale teorico.
-  const floor = Math.max(contoBase, CONFIG.contoFloorDiscrezionale);
+  const pockets = Object.fromEntries(POCKETS.map((k) => [k, resolveCat(ps[k], base)])) as Record<
+    PocketCat,
+    number
+  >;
+  let conto = rimanente - POCKETS.reduce((s, k) => s + pockets[k], 0);
 
   let compresso = false;
-  if (conto < floor) {
-    compresso = true;
-    let deficit = floor - conto;
-    // Comprimi dal basso: prima Fondo comune, poi Viaggi, poi Investimenti.
-    // Cibo e Spese casa non si comprimono mai.
-    for (const cut of ["fondo", "viaggi", "investimenti"] as const) {
-      if (deficit <= 0) break;
-      const current = cut === "fondo" ? fondo : cut === "viaggi" ? viaggi : investimenti;
-      const take = Math.min(current, deficit);
-      if (cut === "fondo") fondo -= take;
-      else if (cut === "viaggi") viaggi -= take;
-      else investimenti -= take;
-      deficit -= take;
-      conto += take;
-    }
+  let mancante = CONFIG.contoFloorDiscrezionale - conto;
+  for (const k of COMPRESSION_ORDER) {
+    if (mancante <= 0) break;
+    const take = Math.min(pockets[k], mancante);
+    if (take > 0) compresso = true;
+    pockets[k] -= take;
+    conto += take;
+    mancante -= take;
   }
 
-  // Se anche dopo la compressione conto < contoBase, c'e' un deficit reale.
-  const deficit = conto < contoBase ? round2(contoBase - conto) : 0;
-
-  return {
-    cibo: round2(cibo),
-    investimenti: round2(investimenti),
-    contoPersonale: round2(conto),
-    viaggi: round2(viaggi),
-    fondoComune: round2(fondo),
-    speseCasa: round2(casa),
-    compresso,
-    deficit,
-  };
+  return { cibo, rimanente, pockets, conto, compresso, deficit: conto < 0 ? round2(-conto) : 0 };
 }
 
 function buildPerson(
@@ -221,40 +265,42 @@ function buildPerson(
   person: Person,
   accountId: string,
   casaQuota: number,
+  quotaCondivise: number,
   stipendio: number,
   ps: PersonSettings
 ): PersonBudget {
   const bcc = computeBcc(rows, person, accountId);
   const libero = stipendio - bcc.bcc;
-  const contoBase = computeContoBase(rows, accountId);
-  const alloc = allocate(libero, contoBase, casaQuota, ps);
+  const spesePersonali = computePersonali(rows, accountId);
+  const a = allocate(libero, { speseCasa: casaQuota, spesePersonali, quotaCondivise }, ps);
 
-  const categorie = {
-    cibo: alloc.cibo,
-    investimenti: alloc.investimenti,
-    contoPersonale: alloc.contoPersonale,
-    viaggi: alloc.viaggi,
-    fondoComune: alloc.fondoComune,
-    speseCasa: alloc.speseCasa,
+  const categorie: Categorie = {
+    cibo: round2(a.cibo),
+    speseCasa: round2(casaQuota),
+    spesePersonali: round2(spesePersonali),
+    quotaCondivise: round2(quotaCondivise),
+    investimenti: round2(a.pockets.investimenti),
+    viaggi: round2(a.pockets.viaggi),
+    cointestato: round2(a.pockets.cointestato),
+    imprevisti: round2(a.pockets.imprevisti),
+    contoPersonale: round2(a.conto),
   };
-  const totale = round2(
-    categorie.cibo +
-      categorie.investimenti +
-      categorie.contoPersonale +
-      categorie.viaggi +
-      categorie.fondoComune +
-      categorie.speseCasa
-  );
 
-  const pc = (v: number) => (libero > 0 ? round2((v / libero) * 100) : 0);
-  const perc = {
-    cibo: pc(categorie.cibo),
-    investimenti: pc(categorie.investimenti),
-    contoPersonale: pc(categorie.contoPersonale),
-    viaggi: pc(categorie.viaggi),
-    fondoComune: pc(categorie.fondoComune),
-    speseCasa: pc(categorie.speseCasa),
+  const onLibero = (v: number) => (libero > 0 ? round2((v / libero) * 100) : 0);
+  const onRimanente = (v: number) => (a.rimanente > 0 ? round2((v / a.rimanente) * 100) : 0);
+  const perc: Categorie = {
+    cibo: onLibero(a.cibo),
+    speseCasa: onLibero(casaQuota),
+    spesePersonali: onLibero(spesePersonali),
+    quotaCondivise: onLibero(quotaCondivise),
+    investimenti: onRimanente(a.pockets.investimenti),
+    viaggi: onRimanente(a.pockets.viaggi),
+    cointestato: onRimanente(a.pockets.cointestato),
+    imprevisti: onRimanente(a.pockets.imprevisti),
+    contoPersonale: onRimanente(a.conto),
   };
+
+  const totale = round2(Object.values(categorie).reduce((s, v) => s + v, 0));
 
   return {
     person,
@@ -264,37 +310,31 @@ function buildPerson(
     bccSharedNoPaga: round2(bcc.bccSharedNoPaga),
     bccSharedPaga: round2(bcc.bccSharedPaga),
     bccIndividuale: round2(bcc.bccIndividuale),
-    contoBase: round2(contoBase),
+    rimanente: round2(a.rimanente),
     categorie,
     perc,
     totale,
-    compresso: alloc.compresso,
-    deficit: alloc.deficit,
+    compresso: a.compresso,
+    deficit: a.deficit,
   };
 }
 
 export function computeBudget(rows: SpesaRow[], settings?: BudgetSettings): BudgetResult {
   const s = settings ?? defaultSettings();
   const casa = computeCasa(rows, s.casaExtraTotale);
+  const condivise = computeCondivise(rows);
 
   const accIds = {
     ale: "27253915-e418-80c8-9c84-f4adfa38de8d",
     cris: "27253915-e418-80d1-b464-d47b60f2ef99",
   };
 
-  const salaries = s.salaries;
-  // Stipendi: usa i valori passati (input utente) se validi, altrimenti i default del config.
   const valid = (n: unknown) => typeof n === "number" && isFinite(n) && n >= 0;
-  const stipAle = valid(salaries?.ale) ? salaries.ale : CONFIG.stipendio.ale;
-  const stipCris = valid(salaries?.cris) ? salaries.cris : CONFIG.stipendio.cris;
+  const stipAle = valid(s.salaries?.ale) ? s.salaries.ale : CONFIG.stipendio.ale;
+  const stipCris = valid(s.salaries?.cris) ? s.salaries.cris : CONFIG.stipendio.cris;
 
-  const ale = buildPerson(rows, "ale", accIds.ale, casa.quota, stipAle, s.ale);
-  const cris = buildPerson(rows, "cris", accIds.cris, casa.quota, stipCris, s.cris);
-
-  // Differenza sui contributi al "comune": Viaggi + Fondo comune + Spese casa
-  const comuneAle = ale.categorie.viaggi + ale.categorie.fondoComune + ale.categorie.speseCasa;
-  const comuneCris = cris.categorie.viaggi + cris.categorie.fondoComune + cris.categorie.speseCasa;
-  const differenzaComune = round2(comuneAle - comuneCris);
+  const ale = buildPerson(rows, "ale", accIds.ale, casa.quota, condivise.quota.ale, stipAle, s.ale);
+  const cris = buildPerson(rows, "cris", accIds.cris, casa.quota, condivise.quota.cris, stipCris, s.cris);
 
   return {
     ale,
@@ -303,9 +343,8 @@ export function computeBudget(rows: SpesaRow[], settings?: BudgetSettings): Budg
     speseCasaRigheReali: round2(casa.righeReali),
     casaExtraTotale: round2(s.casaExtraTotale),
     casaRows: casa.casaRows,
-    differenzaComune,
-    differenzaChi: differenzaComune > 0 ? "ale" : differenzaComune < 0 ? "cris" : null,
+    condiviseRows: condivise.list,
+    conguaglio: condivise.conguaglio,
+    senzaPagante: condivise.senzaPagante,
   };
 }
-
-void PEOPLE;

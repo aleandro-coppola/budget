@@ -25,20 +25,21 @@ export const CONFIG = {
   // Cibo: importo fisso mensile (non dal DB, non scala col reddito)
   cibo: { ale: 220, cris: 130 } as Record<Person, number>,
 
-  // Investimenti: tetto massimo mensile (20% del residuo dopo cibo, sul libero attuale)
-  investimentiCap: { ale: 191.43, cris: 76.85 } as Record<Person, number>,
-
-  // Viaggi: tetto massimo mensile (15% del residuo dopo cibo, sul libero attuale)
-  viaggiCap: { ale: 143.57, cris: 57.64 } as Record<Person, number>,
-
-  // Fondo comune: tetto massimo mensile (10% del residuo dopo cibo, sul libero attuale)
-  fondoCap: { ale: 95.72, cris: 38.43 } as Record<Person, number>,
+  // Pocket in % del RIMANENTE (libero - cibo - casa - spese Revolut personali - quota condivise).
+  // cap = tetto massimo mensile in €.
+  // Cointestato 30%: ~3-4 cene, un paio di cinema e uscite nel weekend (~300€/mese in due).
+  pockets: {
+    investimenti: { ale: { pct: 10, cap: 200 }, cris: { pct: 0, cap: 100 } },
+    viaggi: { ale: { pct: 15, cap: 250 }, cris: { pct: 15, cap: 150 } },
+    cointestato: { ale: { pct: 30, cap: 400 }, cris: { pct: 30, cap: 250 } },
+    imprevisti: { ale: { pct: 5, cap: 100 }, cris: { pct: 5, cap: 60 } },
+  } as Record<"investimenti" | "viaggi" | "cointestato" | "imprevisti", Record<Person, { pct: number; cap: number }>>,
 
   // Spese casa: extra fisso TOTALE aggiunto alle righe reali (poi diviso 50/50)
   casaExtraTotale: 40,
 
-  // Conto personale: floor discrezionale teorico per persona (punto aperto).
-  // Il conto personale copre comunque sempre le spese individuali reali gia' sostenute.
+  // Conto personale (residuo): minimo discrezionale per persona; sotto questa soglia
+  // i pocket vengono compressi.
   contoFloorDiscrezionale: 50,
 };
 

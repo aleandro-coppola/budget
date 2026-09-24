@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { isValidSession, SESSION_COOKIE } from "@/lib/auth";
+import { defaultSettings } from "@/lib/budget";
 import Dashboard from "../dashboard";
 
 export const dynamic = "force-dynamic";
@@ -10,5 +11,5 @@ export default function BudgetPage() {
   if (!isValidSession(session)) {
     redirect("/login");
   }
-  return <Dashboard />;
+  return <Dashboard defaults={defaultSettings()} />;
 }

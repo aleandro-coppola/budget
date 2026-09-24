@@ -91,23 +91,30 @@ Se cambi le env dopo il primo deploy, fai **Redeploy**.
 Tutto parte dalle righe grezze del DB "Spese" (le colonne formula del DB "Accounts" non sono
 leggibili via integrazione, quindi si ricalcola da zero).
 
+**Tag**: `bcc` = pagata dalla BCC, tutto il resto = pagato da Revolut · `shared` = condivisa, /2 ·
+`spesa-casa` (con shared, non bcc) = pocket Spese Casa · `paga-ale`/`paga-cris` (con shared) = chi
+anticipa, l'altro gli deve metà.
+
 - **BCC persona** = `(shared & bcc senza paga)/2 + (shared & bcc & paga-persona)/2 + (non-shared & bcc del suo account)`
 - **Libero** = Stipendio − BCC persona
-- **Allocazione** (priorità: Cibo → Investimenti → Conto personale → Viaggi → Fondo comune → Spese casa):
-  - Cibo: fisso (Ale 225 / Cris 125)
-  - Investimenti: tetto Ale 100 / Cris 0
-  - Viaggi: tetto Ale 150 / Cris 100
-  - Fondo comune: tetto Ale 120 / Cris 70
-  - Spese casa: righe reali (`spesa-casa` + `revolut` + `shared`, non `bcc`) + 40 extra totale, diviso 50/50
-  - Conto personale: spese individuali reali (`revolut`, non `shared`) + tutto il surplus residuo
-- Se il libero non basta, si comprimono **solo** le voci discrezionali dal basso
-  (Fondo comune → Viaggi → Investimenti); Cibo e Spese casa non si toccano.
+- **Spese fisse** (tolte dal libero):
+  - Cibo: fisso (Ale 220 / Cris 130)
+  - Spese casa: righe `shared` + `spesa-casa` non `bcc` + 40 extra totale, diviso 50/50
+  - Spese Revolut personali: righe non `bcc`, non `shared`, del proprio account
+  - Spese condivise (metà): metà di ogni riga `shared` non-casa; per le righe `bcc` con `paga-X`
+    solo l'altro (la metà di X è già nella sua BCC)
+- **Rimanente** = Libero − spese fisse, diviso in pocket (in % del rimanente, con tetto €):
+  Investimenti (Ale 10% / Cris 0%), Viaggi 15%, Conto cointestato 30%, Imprevisti 5%,
+  Conto personale = residuo.
+- Se il conto personale scende sotto 50 €, si comprimono i pocket
+  (Cointestato → Viaggi → Investimenti → Imprevisti).
+- **Conguaglio** = metà delle spese shared pagate da Ale − metà di quelle pagate da Cris
+  (righe casa escluse): positivo = Cris dà ad Ale, negativo = Ale dà a Cris. È un bonifico,
+  fuori dal totale.
 
-**Impostazioni dall'app**: stipendi, extra casa, e per ogni categoria discrezionale (Cibo,
-Investimenti, Viaggi, Fondo comune) un **target** in `%` del libero o in `€` fisso più un **tetto**
-massimo. L'effettivo è `min(target, tetto)`. Conto personale (residuo) e Spese casa (Notion + extra)
-si adeguano per tenere il totale al 100%. Le impostazioni si salvano nel browser (localStorage). I
-valori di partenza sono in `src/lib/config.ts`.
+**Impostazioni dall'app**: stipendi, extra casa, e per Cibo e ogni pocket un **target** in `%` o
+in `€` fisso più un **tetto** massimo. L'effettivo è `min(target, tetto)`. Le impostazioni si salvano
+nel browser (localStorage). I valori di partenza sono in `src/lib/config.ts`.
 
 > I numeri sono **live**: possono differire dallo snapshot nelle regole del progetto, che è una
 > foto a una certa data.

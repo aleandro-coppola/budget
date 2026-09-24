@@ -2,7 +2,16 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidSession, SESSION_COOKIE } from "@/lib/auth";
 import { fetchSpese } from "@/lib/notion";
-import { computeBudget, defaultSettings, BudgetSettings } from "@/lib/budget";
+import {
+  computeBudget,
+  defaultSettings,
+  BudgetSettings,
+  CategorySetting,
+  EditableCat,
+  PersonSettings,
+} from "@/lib/budget";
+
+const CATS: EditableCat[] = ["cibo", "investimenti", "viaggi", "cointestato", "imprevisti"];
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,23 +24,19 @@ function mergeSettings(input: unknown): BudgetSettings {
   const num = (v: unknown, fallback: number) =>
     typeof v === "number" && isFinite(v) && v >= 0 ? v : fallback;
 
-  const cat = (v: unknown, dc: BudgetSettings["ale"]["cibo"]) => {
-    const c = (v ?? {}) as Record<string, unknown>;
+  const cat = (v: unknown, dc: CategorySetting): CategorySetting => {
+    if (!v || typeof v !== "object") return dc;
+    const c = v as Record<string, unknown>;
     return {
-      mode: c.mode === "pct" ? "pct" : "eur",
+      mode: c.mode === "pct" ? "pct" : c.mode === "eur" ? "eur" : dc.mode,
       target: num(c.target, dc.target),
       cap: num(c.cap, dc.cap),
-    } as BudgetSettings["ale"]["cibo"];
+    };
   };
 
-  const person = (v: unknown, dp: BudgetSettings["ale"]) => {
+  const person = (v: unknown, dp: PersonSettings): PersonSettings => {
     const p = (v ?? {}) as Record<string, unknown>;
-    return {
-      cibo: cat(p.cibo, dp.cibo),
-      investimenti: cat(p.investimenti, dp.investimenti),
-      viaggi: cat(p.viaggi, dp.viaggi),
-      fondoComune: cat(p.fondoComune, dp.fondoComune),
-    };
+    return Object.fromEntries(CATS.map((k) => [k, cat(p[k], dp[k])])) as PersonSettings;
   };
 
   const sal = (i.salaries ?? {}) as Record<string, unknown>;
