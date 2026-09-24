@@ -268,6 +268,7 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                   </tr>
                 );
               })}
+              <PctTotaleRow settings={settings} />
             </tbody>
           </table>
           <p className="mt-2 text-xs text-slate-400">
@@ -436,6 +437,35 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
         </>
       )}
     </main>
+  );
+}
+
+// Somma delle % dei pocket (Cibo escluso: la sua % è sul libero, non sul rimanente).
+function PctTotaleRow({ settings }: { settings: Settings }) {
+  const pocket = CATS.filter((c) => c.key !== "cibo" && settings.cats[c.key].mode === "pct");
+  const cell = (who: Who) => {
+    const tot = pocket.reduce((s, c) => s + (Number(settings.cats[c.key].target[who]) || 0), 0);
+    const over = tot > 100;
+    return (
+      <td className="px-2 py-2 text-right" colSpan={2}>
+        <span className={`font-semibold tabular-nums ${over ? "text-red-600" : "text-slate-800"}`}>
+          {tot.toLocaleString("it-IT")}%
+        </span>
+        <span className={`ml-1 text-xs ${over ? "text-red-600" : "text-slate-400"}`}>
+          {over ? "supera il 100%" : `· ${(100 - tot).toLocaleString("it-IT")}% al conto personale`}
+        </span>
+      </td>
+    );
+  };
+  return (
+    <tr className="border-t-2 border-slate-200">
+      <td className="px-2 py-2 font-semibold text-slate-700" colSpan={2}>
+        Totale % pocket
+        <span className="ml-1 text-xs font-normal text-slate-400">(sul rimanente, esclusi Cibo e pocket in €)</span>
+      </td>
+      {cell("ale")}
+      {cell("cris")}
+    </tr>
   );
 }
 
