@@ -327,7 +327,7 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                   </td>
                 </tr>
                 {RIGHE_FISSE.map((r) => (
-                  <CatRow key={r.key} riga={r} ale={data.ale} cris={data.cris} />
+                  <CatRow key={r.key} riga={r} data={data} />
                 ))}
                 <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
                   <td className="px-4 py-2">Rimanente</td>
@@ -341,7 +341,7 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                   </td>
                 </tr>
                 {RIGHE_POCKET.map((r) => (
-                  <CatRow key={r.key} riga={r} ale={data.ale} cris={data.cris} />
+                  <CatRow key={r.key} riga={r} data={data} />
                 ))}
                 <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
                   <td className="px-4 py-2">Totale (= libero)</td>
@@ -349,18 +349,8 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.cris.totale)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.totale + data.cris.totale)}</td>
                 </tr>
-                <tr className="border-t border-slate-200 font-semibold text-slate-700">
-                  <td className="px-4 py-2">
-                    Totale da versare nel cointestato
-                    <span className="ml-1 text-xs font-normal text-slate-400">(già incluso sopra)</span>
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.cointestatoTotale)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{euro(data.cris.cointestatoTotale)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">
-                    {euro(data.ale.cointestatoTotale + data.cris.cointestatoTotale)}
-                  </td>
-                </tr>
-                <RitiriRow ritiri={data.ritiri} />
+                <CointestatoTotaleRow data={data} />
+                <RitiriRow data={data} />
               </tbody>
             </table>
           </section>
@@ -449,41 +439,178 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
   );
 }
 
-function CatRow({ riga, ale, cris }: { riga: Riga; ale: PersonBudget; cris: PersonBudget }) {
-  const a = ale.categorie[riga.key];
-  const c = cris.categorie[riga.key];
+// Riga di dettaglio: null = non a carico di quella persona.
+type Dettaglio = { name: string; ale: number | null; cris: number | null; note?: string };
+
+function dettagliDi(key: keyof Categorie, data: BudgetResult): Dettaglio[] | undefined {
+  if (key === "speseCasa") {
+    const righe: Dettaglio[] = data.casaRows
+      .filter((r) => r.spesa > 0)
+      .map((r) => ({ name: r.name, ale: r.spesa / 2, cris: r.spesa / 2 }));
+    if (data.casaExtraTotale > 0) {
+      righe.push({ name: "Extra casa", ale: data.casaExtraTotale / 2, cris: data.casaExtraTotale / 2 });
+    }
+    return righe;
+  }
+  if (key === "spesePersonali") {
+    return [
+      ...data.ale.personaliRows.map((r) => ({ name: r.name, ale: r.spesa, cris: null })),
+      ...data.cris.personaliRows.map((r) => ({ name: r.name, ale: null, cris: r.spesa })),
+    ];
+  }
+  if (key === "quotaCondivise") {
+    return data.condiviseRows.map((r) => ({
+      name: r.name,
+      ale: r.lato === "bcc" && r.pagante === "ale" ? null : r.versa.ale,
+      cris: r.lato === "bcc" && r.pagante === "cris" ? null : r.versa.cris,
+      note: !r.pagante
+        ? "pagata dal cointestato"
+        : r.lato === "bcc"
+          ? `metà di ${WHO_LABEL[r.pagante]} già nella sua BCC`
+          : `anticipata da ${WHO_LABEL[r.pagante]}`,
+    }));
+  }
+  return undefined;
+}
+
+function DettaglioRows({ righe }: { righe: Dettaglio[] }) {
+  const cell = (v: number | null) =>
+    v === null ? <span className="text-slate-300">—</span> : euro(v);
+  if (righe.length === 0) {
+    return (
+      <tr className="bg-slate-50/70 text-xs text-slate-400">
+        <td className="py-1.5 pl-9 pr-4" colSpan={4}>
+          Nessuna voce
+        </td>
+      </tr>
+    );
+  }
   return (
-    <tr className="border-t border-slate-100">
-      <td className="px-4 py-2">
-        {riga.label}
-        {riga.note && <span className="ml-1 text-xs text-slate-400">({riga.note})</span>}
-      </td>
-      <Amount value={a} p={ale.perc[riga.key]} />
-      <Amount value={c} p={cris.perc[riga.key]} />
-      <td className="px-4 py-2 text-right tabular-nums text-slate-500">{euro(a + c)}</td>
-    </tr>
+    <>
+      {righe.map((d, i) => (
+        <tr key={i} className="bg-slate-50/70 text-xs text-slate-500">
+          <td className="py-1.5 pl-9 pr-4">
+            {d.name}
+            {d.note && <span className="ml-1 text-slate-400">· {d.note}</span>}
+          </td>
+          <td className="px-4 py-1.5 text-right tabular-nums">{cell(d.ale)}</td>
+          <td className="px-4 py-1.5 text-right tabular-nums">{cell(d.cris)}</td>
+          <td className="px-4 py-1.5 text-right tabular-nums text-slate-400">{euro((d.ale ?? 0) + (d.cris ?? 0))}</td>
+        </tr>
+      ))}
+    </>
   );
 }
 
-function RitiriRow({ ritiri }: { ritiri: Record<Who, number> }) {
+function Toggle({ open, label, onClick }: { open: boolean; label: React.ReactNode; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-expanded={open} className="flex items-center gap-1.5 text-left">
+      <span className={`inline-block w-3 text-[10px] text-slate-400 transition-transform ${open ? "rotate-90" : ""}`}>
+        ▶
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function CatRow({ riga, data }: { riga: Riga; data: BudgetResult }) {
+  const [open, setOpen] = useState(false);
+  const { ale, cris } = data;
+  const a = ale.categorie[riga.key];
+  const c = cris.categorie[riga.key];
+  const dettagli = dettagliDi(riga.key, data);
+  const label = (
+    <>
+      {riga.label}
+      {riga.note && <span className="ml-1 text-xs text-slate-400">({riga.note})</span>}
+    </>
+  );
+  return (
+    <>
+      <tr className="border-t border-slate-100">
+        <td className="px-4 py-2">
+          {dettagli ? <Toggle open={open} label={label} onClick={() => setOpen((o) => !o)} /> : label}
+        </td>
+        <Amount value={a} p={ale.perc[riga.key]} />
+        <Amount value={c} p={cris.perc[riga.key]} />
+        <td className="px-4 py-2 text-right tabular-nums text-slate-500">{euro(a + c)}</td>
+      </tr>
+      {dettagli && open && <DettaglioRows righe={dettagli} />}
+    </>
+  );
+}
+
+function CointestatoTotaleRow({ data }: { data: BudgetResult }) {
+  const [open, setOpen] = useState(false);
+  const { ale, cris } = data;
+  const dettagli: Dettaglio[] = [
+    { name: "Spese condivise (metà)", ale: ale.categorie.quotaCondivise, cris: cris.categorie.quotaCondivise },
+    { name: "Divertimento", ale: ale.categorie.cointestato, cris: cris.categorie.cointestato },
+  ];
+  return (
+    <>
+      <tr className="border-t border-slate-200 font-semibold text-slate-700">
+        <td className="px-4 py-2">
+          <Toggle
+            open={open}
+            onClick={() => setOpen((o) => !o)}
+            label={
+              <>
+                Totale da versare nel cointestato
+                <span className="ml-1 text-xs font-normal text-slate-400">(già incluso sopra)</span>
+              </>
+            }
+          />
+        </td>
+        <td className="px-4 py-2 text-right tabular-nums">{euro(ale.cointestatoTotale)}</td>
+        <td className="px-4 py-2 text-right tabular-nums">{euro(cris.cointestatoTotale)}</td>
+        <td className="px-4 py-2 text-right tabular-nums">{euro(ale.cointestatoTotale + cris.cointestatoTotale)}</td>
+      </tr>
+      {open && <DettaglioRows righe={dettagli} />}
+    </>
+  );
+}
+
+function RitiriRow({ data }: { data: BudgetResult }) {
+  const [open, setOpen] = useState(false);
+  const { ritiri } = data;
   const cell = (who: Who) =>
     ritiri[who] > 0 ? (
       <span className="text-emerald-700">+{euro(ritiri[who])} da ritirare</span>
     ) : (
       <span className="text-slate-400">—</span>
     );
+  const dettagli: Dettaglio[] = data.condiviseRows
+    .filter((r) => r.pagante && r.ritiro > 0)
+    .map((r) => ({
+      name: r.name,
+      ale: r.pagante === "ale" ? r.ritiro : null,
+      cris: r.pagante === "cris" ? r.ritiro : null,
+      note: r.lato === "bcc" ? "BCC: solo la metà dell'altro" : "anticipata per intero",
+    }));
   return (
-    <tr className="border-t border-amber-200 bg-amber-50">
-      <td className="px-4 py-2 font-medium text-amber-900">
-        Conguaglio: da ritirare dal cointestato
-        <span className="ml-1 text-xs font-normal text-amber-700">(spese anticipate)</span>
-      </td>
-      <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("ale")}</td>
-      <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("cris")}</td>
-      <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-amber-900">
-        {euro(ritiri.ale + ritiri.cris)}
-      </td>
-    </tr>
+    <>
+      <tr className="border-t border-amber-200 bg-amber-50">
+        <td className="px-4 py-2 font-medium text-amber-900">
+          <Toggle
+            open={open}
+            onClick={() => setOpen((o) => !o)}
+            label={
+              <>
+                Conguaglio: da ritirare dal cointestato
+                <span className="ml-1 text-xs font-normal text-amber-700">(spese anticipate)</span>
+              </>
+            }
+          />
+        </td>
+        <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("ale")}</td>
+        <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("cris")}</td>
+        <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-amber-900">
+          {euro(ritiri.ale + ritiri.cris)}
+        </td>
+      </tr>
+      {open && <DettaglioRows righe={dettagli} />}
+    </>
   );
 }
 

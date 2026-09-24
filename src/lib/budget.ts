@@ -90,6 +90,7 @@ export interface PersonBudget {
   bccIndividuale: number;
   rimanente: number;
   cointestatoTotale: number; // quota condivise + % cointestato: bonifico totale al cointestato
+  personaliRows: SpesaRow[]; // dettaglio spese Revolut personali
   categorie: Categorie;
   // % delle voci fisse sul libero, % di pocket e conto personale sul rimanente
   perc: Categorie;
@@ -102,6 +103,7 @@ export interface CondivisaRow extends SpesaRow {
   lato: "bcc" | "revolut";
   pagante: Person | null; // null = pagata direttamente dal cointestato
   ritiro: number; // quanto il pagante ritira dal cointestato
+  versa: Record<Person, number>; // quota di ognuno nel cointestato per questa spesa
 }
 
 export interface BudgetResult {
@@ -157,10 +159,8 @@ function computeBcc(rows: SpesaRow[], person: Person, accountId: string) {
 }
 
 // ---- Spese Revolut personali: non bcc, non shared, del proprio account ----
-function computePersonali(rows: SpesaRow[], accountId: string) {
-  return rows
-    .filter((r) => !has(r, "bcc") && !has(r, "shared") && belongsTo(r, accountId))
-    .reduce((s, r) => s + r.spesa, 0);
+function personaliRows(rows: SpesaRow[], accountId: string) {
+  return rows.filter((r) => !has(r, "bcc") && !has(r, "shared") && belongsTo(r, accountId));
 }
 
 // ---- Spese casa: shared + spesa-casa, non bcc (+ extra totale), divise 50/50 ----
@@ -197,18 +197,19 @@ function computeCondivise(rows: SpesaRow[]) {
     if (bcc && !payer) continue;
 
     let ritiro = 0;
+    const versa: Record<Person, number> = { ale: half, cris: half };
     if (bcc) {
       // La BCC del pagante contiene gia' la sua meta': nel cointestato va solo quella dell'altro.
-      quota[other(payer as Person)] += half;
+      versa[payer as Person] = 0;
       ritiro = half;
-    } else {
-      quota.ale += half;
-      quota.cris += half;
-      if (payer) ritiro = r.spesa;
+    } else if (payer) {
+      ritiro = r.spesa;
     }
+    quota.ale += versa.ale;
+    quota.cris += versa.cris;
     if (payer) ritiri[payer] += ritiro;
 
-    if (r.spesa > 0) list.push({ ...r, lato: bcc ? "bcc" : "revolut", pagante: payer, ritiro });
+    if (r.spesa > 0) list.push({ ...r, lato: bcc ? "bcc" : "revolut", pagante: payer, ritiro, versa });
   }
 
   return { quota, ritiri: { ale: round2(ritiri.ale), cris: round2(ritiri.cris) }, list };
@@ -260,7 +261,8 @@ function buildPerson(
 ): PersonBudget {
   const bcc = computeBcc(rows, person, accountId);
   const libero = stipendio - bcc.bcc;
-  const spesePersonali = computePersonali(rows, accountId);
+  const personali = personaliRows(rows, accountId);
+  const spesePersonali = personali.reduce((s, r) => s + r.spesa, 0);
   const a = allocate(libero, { speseCasa: casaQuota, spesePersonali, quotaCondivise }, ps);
 
   const categorie: Categorie = {
@@ -305,6 +307,7 @@ function buildPerson(
     bccIndividuale: round2(bcc.bccIndividuale),
     rimanente: round2(a.rimanente),
     cointestatoTotale: round2(categorie.quotaCondivise + categorie.cointestato),
+    personaliRows: personali.filter((r) => r.spesa > 0),
     categorie,
     perc,
     totale,
