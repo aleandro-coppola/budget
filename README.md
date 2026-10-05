@@ -127,3 +127,17 @@ La password fissa è una "tenda", non una vera autenticazione: chi la conosce en
 protezione contro tentativi ripetuti. Per soli numeri di budget può bastare. Se un domani vuoi
 qualcosa di più solido: repo privato (fatto), e in aggiunta la Vercel Password Protection
 (Deployment Protection) o un vero provider di login.
+
+---
+
+## Spesa & Ricette (`/spesa`)
+
+Pagina protetta come le altre, raggiungibile dalla home e dall'header di `/budget`. Quattro tab:
+Settimana (pranzi/cene, giorno pizza, suggerimento), Lista spesa (generata dalle ricette, per reparto),
+Ricette (per 2 persone, con costo stimato) e Prezzi (import da scontrino + listino editabile).
+
+- Dati statici (ingredienti, ricette) in `src/lib/spesa-catalogo.ts`; logica pura in `src/lib/spesa.ts`
+  (test: `test/spesa.test.ts`). Le quantità delle ricette sono frazioni di confezione.
+- Nessun prezzo precablato: partono tutti vuoti finché non si incolla uno scontrino.
+- Lo stato (prezzi, settimana, carrello, "in casa", extra, voci personalizzate) sta nel `localStorage`
+  del browser (chiave `spesa_state_v1`): non è sincronizzato tra dispositivi.

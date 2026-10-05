@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx test/budget.test.ts"
+    "test": "tsx test/budget.test.ts && tsx test/spesa.test.ts"
   },
   "dependencies": {
     "@notionhq/client": "^2.2.15",

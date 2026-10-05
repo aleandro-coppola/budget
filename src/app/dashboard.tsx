@@ -190,12 +190,20 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
             </p>
           )}
         </div>
-        <button
-          onClick={logout}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
-        >
-          Esci
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/spesa"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          >
+            Spesa &amp; Ricette
+          </Link>
+          <button
+            onClick={logout}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          >
+            Esci
+          </button>
+        </div>
       </header>
 
       {/* Stipendi */}

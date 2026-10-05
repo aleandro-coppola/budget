@@ -20,6 +20,13 @@ const PAGES = [
     accent: "text-cris",
     ring: "hover:ring-cris/30 hover:border-cris/40",
   },
+  {
+    href: "/spesa",
+    title: "Spesa & Ricette",
+    desc: "Menù della settimana, lista della spesa e prezzi.",
+    accent: "text-slate-800",
+    ring: "hover:ring-slate-300 hover:border-slate-400",
+  },
 ];
 
 export default function Home() {
