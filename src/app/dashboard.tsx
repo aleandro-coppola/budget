@@ -293,8 +293,8 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
       {data && !loading && (
         <>
           <section className="mt-6 grid gap-4 sm:grid-cols-2">
-            <PersonCard p={data.ale} />
-            <PersonCard p={data.cris} />
+            <PersonCard p={data.ale} cointestato={data.cointestato} />
+            <PersonCard p={data.cris} cointestato={data.cointestato} />
           </section>
 
           <CointestatoSection data={data} />

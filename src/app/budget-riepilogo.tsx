@@ -1,6 +1,6 @@
 "use client";
 
-import type { BudgetResult, CondivisaRow, PersonBudget } from "@/lib/budget";
+import type { BudgetResult, CondivisaRow, PersonBudget, RiepilogoCointestato } from "@/lib/budget";
 import { euro } from "@/lib/format";
 
 type Who = "ale" | "cris";
@@ -15,19 +15,35 @@ const ACCENT = {
 // ---------------------------------------------------------------------------
 // Card Ale / Cristina: dove vanno i soldi liberi sul Revolut
 // ---------------------------------------------------------------------------
-export function PersonCard({ p }: { p: PersonBudget }) {
+export function PersonCard({ p, cointestato }: { p: PersonBudget; cointestato: RiepilogoCointestato }) {
   const a = ACCENT[p.person];
   const c = p.categorie;
   const contoPersonale = c.spesePersonali + c.contoPersonale;
+  const ritirato = cointestato.ritira[p.person].totale;
+  const saldo = cointestato.saldo[p.person]; // versamento - ritiri: quello che esce davvero verso il cointestato
 
-  const righe: { label: string; note?: string; valore: number; verde?: boolean }[] = [
+  type RigaCard = { label: string; note?: string; valore: number; tono?: "verde" | "grigio" };
+  const righe: RigaCard[] = [
     { label: "Cibo mensile", valore: c.cibo },
     { label: "Spese casa", valore: c.speseCasa },
     {
       label: "Conto cointestato",
-      note: `${euro(c.quotaCondivise)} spese condivise + ${euro(c.cointestato)} divertimento`,
-      valore: p.cointestatoTotale,
+      note:
+        ritirato > 0
+          ? `${euro(p.cointestatoTotale)} da versare − ${euro(ritirato)} che ritiri`
+          : `${euro(c.quotaCondivise)} spese condivise + ${euro(c.cointestato)} divertimento`,
+      valore: saldo,
     },
+    ...(ritirato > 0
+      ? [
+          {
+            label: "Spese condivise che anticipi",
+            note: "le paghi tu con la carta, poi te le rimborsa il cointestato",
+            valore: ritirato,
+            tono: "grigio" as const,
+          },
+        ]
+      : []),
     { label: "Viaggi", valore: c.viaggi },
     { label: "Investimenti", valore: c.investimenti },
     { label: "Imprevisti", valore: c.imprevisti },
@@ -35,7 +51,7 @@ export function PersonCard({ p }: { p: PersonBudget }) {
       label: "Conto personale",
       note: `${euro(c.spesePersonali)} di spese già note + ${euro(c.contoPersonale)} liberi da spendere`,
       valore: contoPersonale,
-      verde: true,
+      tono: "verde",
     },
   ];
 
@@ -57,7 +73,14 @@ export function PersonCard({ p }: { p: PersonBudget }) {
       </h3>
       <ul className="mt-1 divide-y divide-slate-100">
         {righe.map((r) => (
-          <Voce key={r.label} {...r} libero={p.libero} barClass={r.verde ? "bg-emerald-500" : a.bar} />
+          <Voce
+            key={r.label}
+            label={r.label}
+            note={r.note}
+            valore={r.valore}
+            libero={p.libero}
+            barClass={r.tono === "verde" ? "bg-emerald-500" : r.tono === "grigio" ? "bg-slate-300" : a.bar}
+          />
         ))}
       </ul>
       <div className="mt-2 flex justify-between border-t-2 border-slate-200 pt-2 text-sm font-semibold text-slate-900">

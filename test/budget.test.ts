@@ -135,6 +135,14 @@ eq("Restano = divertimento Ale + Cris", ct.restano, b.ale.categorie.cointestato 
 eq("Saldo Ale (versa - ritira)", ct.saldo.ale, 309.41);
 eq("Saldo Cris (versa - ritira)", ct.saldo.cris, 121.95);
 eq("Ritiri coerenti con il vecchio campo", ct.ritira.ale.totale, b.ritiri.ale);
+// La card mostra il saldo netto + le spese anticipate: il totale deve restare uguale al libero.
+for (const who of ["ale", "cris"] as const) {
+  const pb = b[who];
+  const c = pb.categorie;
+  const somma =
+    c.cibo + c.speseCasa + ct.saldo[who] + ct.ritira[who].totale + c.viaggi + c.investimenti + c.imprevisti + c.spesePersonali + c.contoPersonale;
+  eq(`Card ${who}: righe (cointestato netto + anticipate) = libero`, somma, pb.libero);
+}
 
 console.log("\n=== COINTESTATO: esempio 100 vs 90 ===");
 const ex = computeBudget([
