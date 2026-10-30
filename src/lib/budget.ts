@@ -106,6 +106,17 @@ export interface CondivisaRow extends SpesaRow {
   versa: Record<Person, number>; // quota di ognuno nel cointestato per questa spesa
 }
 
+// Flussi del conto cointestato: chi versa, chi ritira (e su quale conto), cosa resta.
+export interface RiepilogoCointestato {
+  versa: Record<Person, { condivise: number; divertimento: number; totale: number }>;
+  ritira: Record<Person, { revolut: number; bcc: number; totale: number }>;
+  pagateDirette: number; // spese condivise senza paga-* pagate direttamente dal cointestato
+  entrano: number; // versamenti di entrambi
+  escono: number; // ritiri + spese pagate direttamente
+  restano: number; // = entrano - escono = budget divertimento di coppia
+  saldo: Record<Person, number>; // versa - ritira: >0 = versa di piu', <0 = ritira di piu'
+}
+
 export interface BudgetResult {
   ale: PersonBudget;
   cris: PersonBudget;
@@ -115,6 +126,7 @@ export interface BudgetResult {
   casaRows: SpesaRow[];
   condiviseRows: CondivisaRow[];
   ritiri: Record<Person, number>; // da ritirare dal cointestato per le spese anticipate
+  cointestato: RiepilogoCointestato;
 }
 
 const has = (row: SpesaRow, tag: string) => row.tags.includes(tag);
@@ -213,6 +225,31 @@ function computeCondivise(rows: SpesaRow[]) {
   }
 
   return { quota, ritiri: { ale: round2(ritiri.ale), cris: round2(ritiri.cris) }, list };
+}
+
+function computeCointestato(
+  persone: Record<Person, PersonBudget>,
+  righe: CondivisaRow[]
+): RiepilogoCointestato {
+  const versa = {} as RiepilogoCointestato["versa"];
+  const ritira = {} as RiepilogoCointestato["ritira"];
+  const saldo = {} as RiepilogoCointestato["saldo"];
+  for (const p of ["ale", "cris"] as Person[]) {
+    const mie = righe.filter((r) => r.pagante === p);
+    const revolut = mie.filter((r) => r.lato === "revolut").reduce((t, r) => t + r.ritiro, 0);
+    const bcc = mie.filter((r) => r.lato === "bcc").reduce((t, r) => t + r.ritiro, 0);
+    versa[p] = {
+      condivise: persone[p].categorie.quotaCondivise,
+      divertimento: persone[p].categorie.cointestato,
+      totale: persone[p].cointestatoTotale,
+    };
+    ritira[p] = { revolut: round2(revolut), bcc: round2(bcc), totale: round2(revolut + bcc) };
+    saldo[p] = round2(versa[p].totale - ritira[p].totale);
+  }
+  const pagateDirette = round2(righe.filter((r) => !r.pagante).reduce((t, r) => t + r.spesa, 0));
+  const entrano = round2(versa.ale.totale + versa.cris.totale);
+  const escono = round2(ritira.ale.totale + ritira.cris.totale + pagateDirette);
+  return { versa, ritira, pagateDirette, entrano, escono, restano: round2(entrano - escono), saldo };
 }
 
 // Risolve un target (%/€) in € sulla base indicata e lo limita al tetto.
@@ -342,5 +379,6 @@ export function computeBudget(rows: SpesaRow[], settings?: BudgetSettings): Budg
     casaRows: casa.casaRows,
     condiviseRows: condivise.list,
     ritiri: condivise.ritiri,
+    cointestato: computeCointestato({ ale, cris }, condivise.list),
   };
 }

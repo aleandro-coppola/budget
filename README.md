@@ -111,6 +111,9 @@ anticipa, l'altro gli deve metà.
 - **Conto cointestato** = metà delle spese condivise (non casa) + % divertimento. Chi ha anticipato
   una spesa condivisa (`paga-X`) la ritira dal cointestato: per intero se pagata da Revolut, solo la
   metà dell'altro se pagata dalla BCC. Senza `paga-*` si paga direttamente dal cointestato.
+  In app la sezione "Conto cointestato" mostra quanto **entra** (versamenti), quanto **esce** (rimborsi
+  e spese pagate dal conto) e quanto **resta** (= budget divertimento di coppia), più i passi di ognuno:
+  quanto versare e quanto ritirare, su Revolut o sulla BCC a seconda di dove ha pagato.
 
 **Impostazioni dall'app**: stipendi, extra casa, e per Cibo e ogni pocket un **target** in `%` o
 in `€` fisso più un **tetto** massimo. L'effettivo è `min(target, tetto)`. Le impostazioni si salvano

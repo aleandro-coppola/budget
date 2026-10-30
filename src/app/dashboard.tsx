@@ -3,11 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { BudgetResult, BudgetSettings, Categorie, CatMode, EditableCat, PersonBudget } from "@/lib/budget";
-
-const euro = (n: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
-const pct = (n: number) => `${n.toFixed(1).replace(".", ",")}%`;
+import type { BudgetResult, BudgetSettings, Categorie, CatMode, EditableCat } from "@/lib/budget";
+import { euro, pct } from "@/lib/format";
+import { CointestatoSection, PersonCard } from "./budget-riepilogo";
 
 type Who = "ale" | "cris";
 const WHO_LABEL: Record<Who, string> = { ale: "Ale", cris: "Cristina" };
@@ -295,31 +293,15 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
       {data && !loading && (
         <>
           <section className="mt-6 grid gap-4 sm:grid-cols-2">
-            <PersonCard p={data.ale} accent="ale" />
-            <PersonCard p={data.cris} accent="cris" />
+            <PersonCard p={data.ale} />
+            <PersonCard p={data.cris} />
           </section>
 
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p>
-              <span className="font-semibold">Conto cointestato:</span> Ale versa{" "}
-              <span className="font-semibold">{euro(data.ale.cointestatoTotale)}</span>, Cristina versa{" "}
-              <span className="font-semibold">{euro(data.cris.cointestatoTotale)}</span> (metà spese condivise +
-              divertimento).
-            </p>
-            <p className="mt-1">
-              <span className="font-semibold">Da ritirare</span> per le spese condivise anticipate:{" "}
-              {(["ale", "cris"] as Who[]).map((w, i) => (
-                <span key={w}>
-                  {i > 0 && " · "}
-                  {WHO_LABEL[w]} <span className="font-semibold">{euro(data.ritiri[w])}</span>
-                </span>
-              ))}
-              .
-            </p>
-          </div>
+          <CointestatoSection data={data} />
 
           {/* Tabella riepilogo */}
-          <section className="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+          <h2 className="mb-2 mt-8 text-base font-semibold text-slate-800">Confronto Ale / Cristina</h2>
+          <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-slate-100 text-left text-slate-600">
                 <tr>
@@ -358,68 +340,8 @@ export default function Dashboard({ defaults }: { defaults: BudgetSettings }) {
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.cris.totale)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{euro(data.ale.totale + data.cris.totale)}</td>
                 </tr>
-                <CointestatoTotaleRow data={data} />
-                <RitiriRow data={data} />
               </tbody>
             </table>
-          </section>
-
-          {/* Spese condivise */}
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-slate-700">Spese condivise → conto cointestato</h2>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Ogni spesa condivisa (non casa) si divide a metà e ognuno versa la sua metà nel cointestato. Chi
-              l&apos;ha anticipata con la sua carta la ritira dal cointestato. Per le spese BCC ritira solo la metà
-              dell&apos;altro, perché la sua è già nella BCC. Senza paga-ale/paga-cris la spesa si paga
-              direttamente dal cointestato.
-            </p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-slate-400">
-                  <tr>
-                    <th className="py-1 pr-3 font-medium">Spesa</th>
-                    <th className="py-1 pr-3 font-medium">Conto</th>
-                    <th className="py-1 pr-3 font-medium">Pagata da</th>
-                    <th className="py-1 pr-3 text-right font-medium">Totale</th>
-                    <th className="py-1 pr-3 text-right font-medium">Metà</th>
-                    <th className="py-1 text-right font-medium">Da ritirare</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.condiviseRows.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="py-1 pr-3 text-slate-600">{r.name}</td>
-                      <td className="py-1 pr-3 text-xs uppercase text-slate-400">{r.lato}</td>
-                      <td className="py-1 pr-3 text-xs">
-                        {r.pagante ? (
-                          <span className={r.pagante === "ale" ? "text-ale" : "text-cris"}>{WHO_LABEL[r.pagante]}</span>
-                        ) : (
-                          <span className="text-slate-500">Cointestato</span>
-                        )}
-                      </td>
-                      <td className="py-1 pr-3 text-right tabular-nums">{euro(r.spesa)}</td>
-                      <td className="py-1 pr-3 text-right tabular-nums text-slate-500">{euro(r.spesa / 2)}</td>
-                      <td className="py-1 text-right tabular-nums">
-                        {r.pagante ? (
-                          <span className={r.pagante === "ale" ? "text-ale" : "text-cris"}>{euro(r.ritiro)}</span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="border-t-2 border-slate-200 text-xs font-semibold text-slate-600">
-                    <td className="py-1.5 pr-3" colSpan={4}>
-                      Versano nel cointestato: Ale {euro(data.ale.categorie.quotaCondivise)} · Cristina{" "}
-                      {euro(data.cris.categorie.quotaCondivise)}
-                    </td>
-                    <td className="py-1.5 text-right" colSpan={2}>
-                      Ritirano: Ale {euro(data.ritiri.ale)} · Cristina {euro(data.ritiri.cris)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </section>
 
           {/* Dettaglio spese casa */}
@@ -578,80 +500,6 @@ function CatRow({ riga, data }: { riga: Riga; data: BudgetResult }) {
   );
 }
 
-function CointestatoTotaleRow({ data }: { data: BudgetResult }) {
-  const [open, setOpen] = useState(false);
-  const { ale, cris } = data;
-  const dettagli: Dettaglio[] = [
-    { name: "Spese condivise (metà)", ale: ale.categorie.quotaCondivise, cris: cris.categorie.quotaCondivise },
-    { name: "Divertimento", ale: ale.categorie.cointestato, cris: cris.categorie.cointestato },
-  ];
-  return (
-    <>
-      <tr className="border-t border-slate-200 font-semibold text-slate-700">
-        <td className="px-4 py-2">
-          <Toggle
-            open={open}
-            onClick={() => setOpen((o) => !o)}
-            label={
-              <>
-                Totale da versare nel cointestato
-                <span className="ml-1 text-xs font-normal text-slate-400">(già incluso sopra)</span>
-              </>
-            }
-          />
-        </td>
-        <td className="px-4 py-2 text-right tabular-nums">{euro(ale.cointestatoTotale)}</td>
-        <td className="px-4 py-2 text-right tabular-nums">{euro(cris.cointestatoTotale)}</td>
-        <td className="px-4 py-2 text-right tabular-nums">{euro(ale.cointestatoTotale + cris.cointestatoTotale)}</td>
-      </tr>
-      {open && <DettaglioRows righe={dettagli} />}
-    </>
-  );
-}
-
-function RitiriRow({ data }: { data: BudgetResult }) {
-  const [open, setOpen] = useState(false);
-  const { ritiri } = data;
-  const cell = (who: Who) =>
-    ritiri[who] > 0 ? (
-      <span className="text-emerald-700">+{euro(ritiri[who])} da ritirare</span>
-    ) : (
-      <span className="text-slate-400">—</span>
-    );
-  const dettagli: Dettaglio[] = data.condiviseRows
-    .filter((r) => r.pagante && r.ritiro > 0)
-    .map((r) => ({
-      name: r.name,
-      ale: r.pagante === "ale" ? r.ritiro : null,
-      cris: r.pagante === "cris" ? r.ritiro : null,
-      note: r.lato === "bcc" ? "BCC: solo la metà dell'altro" : "anticipata per intero",
-    }));
-  return (
-    <>
-      <tr className="border-t border-amber-200 bg-amber-50">
-        <td className="px-4 py-2 font-medium text-amber-900">
-          <Toggle
-            open={open}
-            onClick={() => setOpen((o) => !o)}
-            label={
-              <>
-                Conguaglio: da ritirare dal cointestato
-                <span className="ml-1 text-xs font-normal text-amber-700">(spese anticipate)</span>
-              </>
-            }
-          />
-        </td>
-        <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("ale")}</td>
-        <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums">{cell("cris")}</td>
-        <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-amber-900">
-          {euro(ritiri.ale + ritiri.cris)}
-        </td>
-      </tr>
-      {open && <DettaglioRows righe={dettagli} />}
-    </>
-  );
-}
-
 function Amount({ value, p }: { value: number; p: number }) {
   return (
     <td className="px-4 py-2 text-right tabular-nums">
@@ -714,52 +562,5 @@ function MiniNum({
         <span className="pr-1 text-xs text-slate-400">{unit}</span>
       </div>
     </td>
-  );
-}
-
-function PersonCard({ p, accent }: { p: PersonBudget; accent: "ale" | "cris" }) {
-  const ring = accent === "ale" ? "ring-ale/30" : "ring-cris/30";
-  const text = accent === "ale" ? "text-ale" : "text-cris";
-  const fisse = p.categorie.cibo + p.categorie.speseCasa + p.categorie.spesePersonali + p.categorie.quotaCondivise;
-  return (
-    <div className={`rounded-2xl border border-slate-200 bg-white p-5 ring-1 ${ring}`}>
-      <div className="flex items-baseline justify-between">
-        <h2 className={`text-lg font-semibold ${text}`}>{p.person === "ale" ? "Ale" : "Cristina"}</h2>
-        <span className="text-sm text-slate-500">Rimanente {euro(p.rimanente)}</span>
-      </div>
-      <dl className="mt-3 space-y-1 text-sm text-slate-600">
-        <Row label="Stipendio" value={euro(p.stipendio)} />
-        <Row label="− Spese BCC" value={euro(p.bcc)} />
-        <Row label="= Libero (Revolut)" value={euro(p.libero)} bold />
-        <Row label="− Spese fisse (cibo, casa, Revolut, condivise)" value={euro(fisse)} />
-        <Row label="= Rimanente per i pocket" value={euro(p.rimanente)} bold />
-      </dl>
-      {p.compresso && (
-        <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
-          Rimanente stretto: pocket compressi per lasciare il minimo sul conto personale.
-          {p.deficit > 0 && ` Mancano ${euro(p.deficit)}.`}
-        </p>
-      )}
-      {!p.compresso && p.deficit > 0 && (
-        <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">Mancano {euro(p.deficit)}.</p>
-      )}
-      <details className="mt-3 text-xs text-slate-500">
-        <summary className="cursor-pointer select-none">Dettaglio BCC</summary>
-        <div className="mt-1 space-y-0.5">
-          <Row label="BCC shared (no paga) /2" value={euro(p.bccSharedNoPaga)} small />
-          <Row label="BCC shared (paga) /2" value={euro(p.bccSharedPaga)} small />
-          <Row label="BCC individuale" value={euro(p.bccIndividuale)} small />
-        </div>
-      </details>
-    </div>
-  );
-}
-
-function Row({ label, value, bold, small }: { label: string; value: string; bold?: boolean; small?: boolean }) {
-  return (
-    <div className={`flex justify-between gap-3 ${bold ? "font-semibold text-slate-900" : ""}`}>
-      <dt className={small ? "text-slate-400" : ""}>{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
-    </div>
   );
 }

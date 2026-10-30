@@ -116,6 +116,26 @@ eq("Ritiro Ale", b.ritiri.ale, 80.2);
 eq("Ritiro Cris (Sanità)", b.ritiri.cris, 25);
 is("Telepass pagata dal cointestato", b.condiviseRows.find((x) => x.name.startsWith("Telepass"))?.pagante, null);
 
+console.log("\n=== RIEPILOGO COINTESTATO ===");
+const ct = b.cointestato;
+eq("Ale versa: condivise", ct.versa.ale.condivise, 93.1);
+eq("Ale versa: divertimento", ct.versa.ale.divertimento, 296.51);
+eq("Ale versa: totale", ct.versa.ale.totale, 389.61);
+eq("Cris versa: totale", ct.versa.cris.totale, 146.95);
+eq("Ale ritira su Revolut", ct.ritira.ale.revolut, 61.2);
+eq("Ale ritira sulla BCC (Vodafone, metà di Cris)", ct.ritira.ale.bcc, 19);
+eq("Ale ritira: totale", ct.ritira.ale.totale, 80.2);
+eq("Cris ritira su Revolut (Sanità)", ct.ritira.cris.revolut, 25);
+eq("Cris ritira sulla BCC", ct.ritira.cris.bcc, 0);
+eq("Spese pagate direttamente dal cointestato (Telepass)", ct.pagateDirette, 100);
+eq("Entrano", ct.entrano, 536.56);
+eq("Escono (ritiri + pagate dirette)", ct.escono, 205.2);
+eq("Restano = somma del divertimento", ct.restano, 331.36);
+eq("Restano = divertimento Ale + Cris", ct.restano, b.ale.categorie.cointestato + b.cris.categorie.cointestato);
+eq("Saldo Ale (versa - ritira)", ct.saldo.ale, 309.41);
+eq("Saldo Cris (versa - ritira)", ct.saldo.cris, 121.95);
+eq("Ritiri coerenti con il vecchio campo", ct.ritira.ale.totale, b.ritiri.ale);
+
 console.log("\n=== COINTESTATO: esempio 100 vs 90 ===");
 const ex = computeBudget([
   r("Pagata da Ale", 100, ["shared", "revolut", "paga-ale"], []),
@@ -126,6 +146,8 @@ eq("Ale ritira", ex.ritiri.ale, 100);
 eq("Cris ritira", ex.ritiri.cris, 90);
 // saldo: Ale 95 - 100 = -5, Cris 95 - 90 = +5 -> come un conguaglio di 5 € da Cris ad Ale
 eq("Saldo Cris - Ale", (ex.cris.categorie.quotaCondivise - ex.ritiri.cris) - (ex.ale.categorie.quotaCondivise - ex.ritiri.ale), 10);
+eq("Esempio: Ale ritira 5 € più di quanto versa nelle condivise", ex.cointestato.ritira.ale.totale - ex.cointestato.versa.ale.condivise, 5);
+eq("Esempio: restano = solo divertimento", ex.cointestato.restano, ex.ale.categorie.cointestato + ex.cris.categorie.cointestato);
 
 console.log("\n=== % + TETTO ===");
 const s1 = defaultSettings();
